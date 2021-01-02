@@ -1,20 +1,14 @@
-/*
- * Logic for sonoff-basic-openhab
- * Author: Michael Fung <hkuser2001 at the gmail service>
-*/
-
-// Load Mongoose OS API
-load('api_timer.js');
 load('api_gpio.js');
-load('api_sys.js');
-load('api_mqtt.js');
 load('api_config.js');
-load('api_log.js');
-load('api_math.js');
-load('api_file.js');
 load('api_rpc.js');
-load('api_events.js');
+load('api_dht.js');
+load('api_timer.js');
+load('api_sensor_utils.js');
+load('api_adc.js');
+load('api_log.js');
 
+let hbridge_active = 1;
+let hbridge_inactive = 0;
 // helpers
 // (convert A-Z to a-z)
 let tolowercase = function (s) {
@@ -36,403 +30,284 @@ let publish = function (topic, msg) {
     return ok;
 };
 
-
 // define variables
 let client_id = Cfg.get('device.id');
 let thing_id = tolowercase(client_id.slice(client_id.length - 6, client_id.length));
-let led_pin = 13; // Sonoff LED pin
-let relay_pin = 12;  // Sonoff relay pin
-let spare_pin = 14;  // Sonoff not connected
-let button_pin = 0;  // Sonoff push button
-let relay_value = 0;
-let last_toggle = 0;
-let tick_count = 0;
-let mqtt_connected = false;
-let clock_sync = false;
-let relay_last_on_ts = null;
-let oncount = 0; // relay ON state duration
-let sch_enable = Cfg.get('timer.sch_enable');
-let skip_once = false;  // skip next schedule for once
 
-// homie structure
-let base_topic = 'homie/' + thing_id;
-let state_topic = base_topic + '/$state';
-let stats_topic = base_topic + '/$stats';
-let relay_state_topic = base_topic + '/relay/state';
-//let relay_state_control_topic = relay_state_topic + '/set';
-let relay_skip_topic = base_topic + '/relay/skip';
-//let relay_skip_control_topic = base_topic + '/relay/skip';
-let relay_ensch_topic = base_topic + '/relay/ensch';
-let relay_oncount_topic = base_topic + '/relay/oncount';
+let device_id = Cfg.get('project.name');
+let device_ip = "unknown";
 
-let system_uptime_topic = base_topic + '/system/uptime';
-let system_ram_topic = base_topic + '/system/ram';
+// homie topic root
+let bstpc = 'homie/' + thing_id + '/';
+Cfg.set({mqtt: {will_topic: bstpc + '$state'}});
+load('api_mqtt.js');
 
-// homie-required last will
-if (Cfg.get('mqtt.will_topic') !== state_topic) {
-    Cfg.set({ mqtt: { will_topic: state_topic } });
-    Cfg.set({ mqtt: { will_message: 'lost' } });
-    Cfg.set({ mqtt: { client_id: client_id } });
-    Log.print(Log.INFO, 'MQTT last will has been updated');
+let nm = Cfg.get('project.name');
+let dht_pin = Cfg.get('pins.dht');
+print('dht_pin:', dht_pin);
+let pubInt = Cfg.get('time.mqttPubInterval');
+let dht = DHT.create(dht_pin, DHT.DHT22);
+let counter = 0;
+
+/**
+ * North Door Open Routine
+ */
+let north_door_close = function() {
+    if (GPIO.read(Cfg.get('pins.north_door_open_contact')) === 0) {
+        // door is already open, do nothing
+        Log.print(Log.INFO, 'Door already open');
+        publish(bstpc + 'north-door/position', 'open');
+        return false;
+    }
+    if (GPIO.read(Cfg.get('pins.north_door_closed_contact')) === 0) {
+        // activate door lowering circuit, rely on interrupt to switch off
+        // when it reaches the bottom
+        Log.print(Log.INFO, 'Opening door');
+        GPIO.write(Cfg.get('pins.north_door_raise', hbridge_active));
+        return true;
+    }
+    return false;
 };
 
-let homie_init = function () {
-    publish(state_topic, 'init');
-    publish(base_topic + '/$homie', '4.0.0');
-    publish(base_topic + '/$name', 'Sonoff Basic (Homie Edition)');
-    publish(base_topic + '/$extensions', '');
-    //    publish(base_topic + '/$extensions', 'org.homie.legacy-stats:0.1.1:[4.x]');
-    //    publish(stats_topic + '/interval', 0);	// OH2.4-friendly
-    publish(base_topic + '/$nodes', 'relay,system');
-    publish(base_topic + '/relay/$name', 'relay');
-    publish(base_topic + '/relay/$type', 'on/off');
-    publish(base_topic + '/relay/$properties', 'state,skip,ensch,oncount');
-
-    publish(base_topic + '/relay/state/$name', 'Relay state');
-    publish(base_topic + '/relay/state/$datatype', 'boolean');
-    publish(base_topic + '/relay/state/$settable', 'true');
-    publish(base_topic + '/relay/state/$retained', 'true');
-
-    publish(base_topic + '/relay/skip/$name', 'Skip next schedule');
-    publish(base_topic + '/relay/skip/$datatype', 'boolean');
-    publish(base_topic + '/relay/skip/$settable', 'true');
-    publish(base_topic + '/relay/skip/$retained', 'false');
-
-    publish(base_topic + '/relay/ensch/$name', 'Enable schedule');
-    publish(base_topic + '/relay/ensch/$datatype', 'boolean');
-    publish(base_topic + '/relay/ensch/$settable', 'true');
-    publish(base_topic + '/relay/ensch/$retained', 'false');
-
-    publish(base_topic + '/relay/oncount/$name', 'On count');
-    publish(base_topic + '/relay/oncount/$datatype', 'integer');
-    //publish(base_topic + '/relay/oncount/$settable', 'false');
-    publish(base_topic + '/relay/oncount/$retained', 'false');
-
-    publish(base_topic + '/system/$name', 'system');
-    publish(base_topic + '/system/$type', 'system');
-    publish(base_topic + '/system/$properties', 'uptime,ram');
-
-    publish(base_topic + '/system/uptime/$name', 'Uptime');
-    publish(base_topic + '/system/uptime/$datatype', 'integer');
-    //publish(base_topic + '/system/uptime/$settable', 'false');
-
-    publish(base_topic + '/system/ram/$name', 'Free RAM');
-    publish(base_topic + '/system/ram/$datatype', 'integer');
-    //publish(base_topic + '/system/ram/$settable', 'false');
-
-    publish(state_topic, 'ready');
+/**
+ * North Door Close Routine
+ */
+let north_door_close = function() {
+    if (GPIO.read(Cfg.get('pins.north_door_close_contact')) === 0) {
+        // door is already closed, do nothing
+        Log.print(Log.INFO, 'Door already closed');
+        publish(bstpc + 'north-door/position', 'closed');
+        return false;
+    }
+    if (GPIO.read(Cfg.get('pins.north_door_open_contact')) === 0) {
+        // activate motor circuit, rely on interrupt to switch off
+        // when it reaches the end
+        Log.print(Log.INFO, 'Closing door');
+        GPIO.write(Cfg.get('pins.north_door_lower', hbridge_active));
+        return true;
+    }
+    return false;
 };
 
-// sntp sync event:
-// ref: https://community.mongoose-os.com/t/add-sntp-synced-event/1208?u=michaelfung
-let MGOS_EVENT_TIME_CHANGED = Event.SYS + 3;
+let mgos_mqtt_num_unsent_bytes = ffi('int mgos_mqtt_num_unsent_bytes(void)');
 
-// calc UTC offset
-// NOTE: str2int('08') gives 0
-let tz = Cfg.get('timer.tz');
-let tz_offset = 0; // in seconds
-let tz_sign = tz.slice(0, 1);
-tz_offset = (str2int(tz.slice(1, 2)) * 10 * 3600) + (str2int(tz.slice(2, 3)) * 3600) + (str2int(tz.slice(3, 5)) * 60);
-if (tz_sign === '-') {
-    tz_offset = tz_offset * -1;
-}
-Log.print(Log.INFO, 'Local time UTC offset: ' + JSON.stringify(tz_offset) + ' seconds');
+let homie_setup_msgs = [
+  {t: bstpc + '$homie', m: "4.0", qos: 1, retain: true},
+  {t: bstpc + '$name',  m:nm, qos: 1, retain: true},
+  {t: bstpc + '$state',  m:'init', qos: 1, retain: true},
+  {t: bstpc + '$nodes',  m:'dht22,north-door,system,light-sensor', qos: 1, retain: true},
 
-// init hardware
-GPIO.set_mode(relay_pin, GPIO.MODE_OUTPUT);
-GPIO.write(relay_pin, 0);  // default to off
+  {t: bstpc + 'system/$name',  m:'system', qos: 1, retain: true},
+  {t: bstpc + 'system/$type',  m:'system', qos: 1, retain: true},
+  {t: bstpc + 'system/$properties',  m:'ip,ram,uptime', qos: 1, retain: true},
 
-GPIO.set_mode(spare_pin, GPIO.MODE_INPUT);
-GPIO.set_mode(button_pin, GPIO.MODE_INPUT);
+  {t: bstpc + 'system/ip/$name',  m:'IP Address', qos: 1, retain: true},
+  {t: bstpc + 'system/ip/$datatype',  m:'string', qos: 1, retain: true},
+  {t: bstpc + 'system/ip/$settable',  m:'false', qos: 1, retain: true},
 
-// night mode
-let setNightMode = function (val) {
-    if (val > 0) {
-        GPIO.blink(led_pin, 0, 0); // off, no blink
-        Log.print(Log.DEBUG, 'Begin Night Mode');
-    } else {
-        if (mqtt_connected) {
-            GPIO.blink(led_pin, 2800, 200); // normal blink    
-        } else {
-            GPIO.blink(led_pin, 200, 200); // fast blink    
-        }
-        Log.print(Log.DEBUG, 'End Night Mode');
+  {t: bstpc + 'system/ram/$name',  m:'Free RAM', qos: 1, retain: true},
+  {t: bstpc + 'system/ram/$datatype',  m:'integer', qos: 1, retain: true},
+  {t: bstpc + 'system/ram/$settable',  m:'false', qos: 1, retain: true},
+
+  {t: bstpc + 'system/uptime/$name',  m:'Uptime', qos: 1, retain: true},
+  {t: bstpc + 'system/uptime/$datatype',  m:'integer', qos: 1, retain: true},
+  {t: bstpc + 'system/uptime/$settable',  m:'false', qos: 1, retain: true},
+
+  {t: bstpc + 'dht22/$name',  m:'DHT22 Temp & Humidity Sensor', qos: 1, retain: true},
+  {t: bstpc + 'dht22/$type',  m:'DHT22', qos: 1, retain: true},
+  {t: bstpc + 'dht22/$properties',  m:'tempc,tempf,rh', qos: 1, retain: true},
+
+  {t: bstpc + 'dht22/tempf/$name',  m:'Temperature in Fahrenheit', qos: 1, retain: true},
+  {t: bstpc + 'dht22/tempf/$datatype',  m:'float', qos: 1, retain: true},
+  {t: bstpc + 'dht22/tempf/$settable',  m:'false', qos: 1, retain: true},
+  {t: bstpc + 'dht22/tempf/$unit',  m:'°F', qos: 1, retain: true},
+
+  {t: bstpc + 'dht22/tempc/$name',  m:'Temperature in Celsius', qos: 1, retain: true},
+  {t: bstpc + 'dht22/tempc/$settable',  m:'false', qos: 1, retain: true},
+  {t: bstpc + 'dht22/tempc/$datatype',  m:'float', qos: 1, retain: true},
+  {t: bstpc + 'dht22/tempc/$unit',  m:'°C', qos: 1, retain: true},
+
+  {t: bstpc + 'dht22/rh/$name',  m:'Relative Humidity', qos: 1, retain: true},
+  {t: bstpc + 'dht22/rh/$settable',  m:'false', qos: 1, retain: true},
+  {t: bstpc + 'dht22/rh/$datatype',  m:'float', qos: 1, retain: true},
+  {t: bstpc + 'dht22/rh/$unit',  m:'%', qos: 1, retain: true},
+
+  {t: bstpc + 'north-door/$name',  m:'North Door', qos: 1, retain: true},
+  {t: bstpc + 'north-door/$type',  m:'door', qos: 1, retain: true},
+  {t: bstpc + 'north-door/$properties',  m:'position', qos: 1, retain: true},
+
+  {t: bstpc + 'north-door/position/$name',  m:'Door Status', qos: 1, retain: true},
+  {t: bstpc + 'north-door/position/$settable',  m:'true', qos: 1, retain: true},
+  {t: bstpc + 'north-door/position/$datatype',  m:'enum', qos: 1, retain: true},
+  {t: bstpc + 'north-door/position/$format',  m:'open,closed,stuck,unknown', qos: 1, retain: true},
+
+  {t: bstpc + 'light-sensor/$name',  m:'Light Sensor', qos: 1, retain: true},
+  {t: bstpc + 'light-sensor/$type',  m:'photosensor', qos: 1, retain: true},
+  {t: bstpc + 'light-sensor/$properties',  m:'luminosity', qos: 1, retain: true},
+  {t: bstpc + 'light-sensor/luminosity/$datatype',  m:'integer', qos: 1, retain: true},
+  {t: bstpc + 'light-sensor/luminosity/$settable',  m:'false', qos: 1, retain: true},
+
+  {t: bstpc + '$state',  m:'ready', qos: 1, retain: true}
+];
+
+// subscribe to homie set commands
+MQTT.sub(bstpc + '+/+/set', function(conn, topic, msg) {
+  print('Topic:', topic, 'message:', msg);
+  if (msg === '1' || msg === 'true') {
+    if (topic.indexOf('south-door/activate') !== -1) {
+      activate_door_south();
+      return;
     }
-};
-let nmEnabled = Cfg.get('nm.enable');
-let nmBeginHour = Cfg.get('nm.bh');
-let nmBeginMinute = Cfg.get('nm.bm');
-let nmEndHour = Cfg.get('nm.eh');
-let nmEndMinute = Cfg.get('nm.em');
-let nmBeginMinOfDay = -1;
-let nmEndMinOfDay = -1;
+  }
+  print("Message ", msg, ' was ignored');
+}, null);
+print('subscribed');
 
-// validate begin - end times
-if (nmEnabled) {
-    nmBeginMinOfDay = (nmBeginHour * 60) + nmBeginMinute;
-    nmEndMinOfDay = (nmEndHour * 60) + nmEndMinute;
-    if (nmBeginMinOfDay < 0 || nmEndMinOfDay < 0 || nmBeginMinOfDay > 1440 || nmEndMinOfDay > 1440) {
-        nmEnabled = false;
-        Log.print(Log.ERROR, 'Begin/End times are invalid. Night Mode disabled!');
-    } else {
-        Log.print(Log.INFO, 'Begin/End times are good. Night Mode enabled.');
-        Log.print(Log.INFO, "Begin Min Of Day: " + JSON.stringify(nmBeginMinOfDay));
-        Log.print(Log.INFO, "End Min Of Day: " + JSON.stringify(nmEndMinOfDay));
-    }
-}
+let homie_msg_ix = 0;
+let homie_init = false;
 
-// set RPC command to begin night mode
-RPC.addHandler('NM.Begin', function (args) {
-    // no args parsing required
-    setNightMode(1);
-    return JSON.stringify({ result: 'OK' });
-});
-
-// set RPC command to end night mode
-RPC.addHandler('NM.End', function (args) {
-    // no args parsing required
-    setNightMode(0);
-    return JSON.stringify({ result: 'OK' });
-});
-
-// read timer schedules from a json file
-let sch = [];
-
-let load_sch = function () {
-    sch = [];  // reset sch
-    let ok = false;
-    let schedules = File.read('schedules.json');
-    if (schedules !== null) {
-        let sch_obj = JSON.parse(schedules);
-        if (sch_obj !== null) {
-            sch = sch_obj.sch;
-            ok = true;
-            Log.print(Log.INFO, 'loaded schedules from file:' + JSON.stringify(sch));
-        } else {
-            Log.print(Log.ERROR, 'schedule file corrupted.');
-        }
-    } else {
-        Log.print(Log.ERROR, 'schedule file missing.');
-    }
-    return ok;
-};
-
-
-// set RPC command to reload schedule timer
-// call me after a new schedules.json file is put into the fs
-RPC.addHandler('ReloadSchedule', function (args) {
-    // no args parsing required
-    let response = {
-        result: load_sch() ? 'OK' : 'Failed'
-    };
-    return JSON.stringify(response);
-});
-
-// notify server of switch state
-let update_state = function () {
-    let uptime = Sys.uptime();
-    let ok = false;
-
-    // calc oncount
-    if (relay_last_on_ts !== null) {
-        oncount += uptime - relay_last_on_ts;
-    }
-    if (relay_value) {
-        relay_last_on_ts = uptime;
-    } else {
-        relay_last_on_ts = null;
-    }
-
-    /*
-    let pubmsg = JSON.stringify({
-        uptime: uptime,
-        memory: Sys.free_ram(),
-        relay_state: relay_value ? 'ON' : 'OFF',
-        oncount: Math.floor(oncount),
-        skip_once: skip_once ? 'ON' : 'OFF',
-        sch_enable: sch_enable ? 'ON' : 'OFF'
-    });
-    */
-
-    //ok = MQTT.pub(system_state_topic, pubmsg);
-    //Log.print(Log.INFO, 'Publish system state ' + (ok ? 'OK' : 'FAIL') + ' msg: ' + pubmsg);
-
-    ok = publish(relay_state_topic, relay_value ? 'true' : 'false');
-    Log.print(Log.INFO, 'Publish relay state ' + (ok ? 'OK' : 'FAILED'));
-
-    ok = publish(relay_skip_topic, skip_once ? 'true' : 'false');
-    Log.print(Log.INFO, 'Publish relay skip ' + (ok ? 'OK' : 'FAILED'));
-    
-    ok = publish(relay_ensch_topic, sch_enable ? 'true' : 'false');
-    Log.print(Log.INFO, 'Publish relay ensch ' + (ok ? 'OK' : 'FAILED'));
-    
-    ok = publish(relay_oncount_topic, JSON.stringify(Math.floor(oncount)));
-    Log.print(Log.INFO, 'Publish relay oncount ' + (ok ? 'OK' : 'FAILED'));
-    if (ok) {
-        oncount = 0;     
-    }
-    
-};
-
-// set switch with bounce protection
-let set_switch = function (value) {
-    if ((Sys.uptime() - last_toggle) > 2) {
-        GPIO.write(relay_pin, value);
-        relay_value = value;
-        last_toggle = Sys.uptime();
-    } else {
-        Log.print(Log.ERROR, 'Bounce protection: operation aborted.');
-    }
-};
-
-// toggle switch with bounce protection
-let toggle_switch = function () {
-    if ((Sys.uptime() - last_toggle) > 2) {
-        GPIO.toggle(relay_pin);
-        relay_value = 1 - relay_value; // 0 1 toggle
-        last_toggle = Sys.uptime();
-    } else {
-        Log.print(Log.ERROR, 'Bounce protection: operation aborted.');
-    }
-};
-
-// check schedule and fire if time reached
-let run_sch = function () {
-    Log.print(Log.DEBUG, 'switch schedules:' + JSON.stringify(sch));
-    let local_now = Math.floor(Timer.now()) + tz_offset;
-    // calc current time of day from mg_time
-    let min_of_day = Math.floor((local_now % 86400) / 60);
-    // calc current day of week from mg_time
-    let day_of_week = Math.floor((local_now % (86400 * 7)) / 86400) + 4; // epoch is Thu
-    Log.print(Log.DEBUG, "run_sch: Localized current time is " + JSON.stringify(min_of_day) + " minutes of day " + JSON.stringify(day_of_week));
-
-    if (sch_enable) {
-        for (let count = 0; count < sch.length; count++) {
-            if (JSON.stringify(min_of_day) === JSON.stringify(sch[count].hour * 60 + sch[count].min)) {
-                if (skip_once) {
-                    Log.print(Log.INFO, '### run_sch: skip once');
-                    skip_once = false;  // reset
-                } else {
-                    Log.print(Log.INFO, '### run_sch: fire action: ' + sch[count].label);
-                    set_switch(sch[count].value);
-                    update_state();
-                }
-            }
-        }
-    }
-
-    // check night mode schedule
-    if (nmEnabled) {
-        // Log.print(Log.INFO, 'check night mode schedule, current min of day: ' + JSON.stringify(min_of_day));
-        if (nmBeginMinOfDay > nmEndMinOfDay) { // e.g. 2300 - 0630
-            if ((min_of_day >= nmBeginMinOfDay) || (min_of_day < nmEndMinOfDay)) {
-                setNightMode(1);
-            } else {
-                setNightMode(0);
-            }
-        } else {  // e.g. 0800 - 1730
-            if ((min_of_day >= nmBeginMinOfDay) && (min_of_day < nmEndMinOfDay)) {
-                setNightMode(1);
-            } else {
-                setNightMode(0);
-            }
-        }
-    }
-};
-
-// sonoff button pressed */
-GPIO.set_button_handler(button_pin, GPIO.PULL_UP, GPIO.INT_EDGE_NEG, 500, function (x) {
-    Log.print(Log.DEBUG, 'button pressed');
-    toggle_switch();
-    update_state();
-}, true);
-
-MQTT.sub(base_topic + '/relay/+/set', function (conn, topic, msg) {
-    Log.print(Log.INFO, 'rcvd set topic: <' + topic + '> msg: ' + msg);
-
-    if (topic.indexOf('state') !== -1) {  // relay state
-        if (msg === 'true') {
-            set_switch(1);
-        } else if (msg === 'false') {
-            set_switch(0);
-        } else {
-            Log.print(Log.ERROR, 'Unsupported command: ' + msg);
-            return;
-        }
-    }
-    else if (topic.indexOf('skip') !== -1) {  // skip next sch
-        if (msg === 'true') {
-            skip_once = true;
-        } else if (msg === 'false') {
-            skip_once = false;
-        } else {
-            Log.print(Log.ERROR, 'Unsupported command: ' + msg);
-            return;
-        }
-        Cfg.set({ timer: { skip_once: skip_once } });
-    }
-    else if (topic.indexOf('ensch') !== -1) {  // enable sch
-        if (msg === 'true') {
-            sch_enable = true;
-        } else if (msg === 'false') {
-            sch_enable = false;
-        } else {
-            Log.print(Log.ERROR, 'Unsupported command: ' + msg);
-            return;
-        }
-        Cfg.set({ timer: { sch_enable: sch_enable } });
+// Asynchronously advance through the homie setup stuff until done
+Timer.set(Cfg.get("homie.pubinterval"), true, function() {
+  if (!MQTT.isConnected()) {
+    print('Waiting for MQTT connect...');
+    return;
+  }
+  let br = mgos_mqtt_num_unsent_bytes();
+  let maxbr = Cfg.get("mqtt.max_unsent");
+  if (br > maxbr) {
+    print('home setup: waiting for MQTT queue to clear: ', br);
+  }
+  if (homie_msg_ix >= 0 && homie_msg_ix < homie_setup_msgs.length) {
+    let msg = homie_setup_msgs[homie_msg_ix];
+    let ret = MQTT.pub(msg.t, msg.m, 2, msg.retain);
+    if (ret === 0) {
+      print("homie pub failed: ", ret);
     }
     else {
-        Log.print(Log.ERROR, 'Unsupported topic');
-        return;
+      // if publication was successful, on the next go around, send the next message
+      homie_msg_ix += 1;
     }
-    update_state();
+  }
 }, null);
 
-MQTT.setEventHandler(function (conn, ev, edata) {
-    if (ev === MQTT.EV_CONNACK) {
-        mqtt_connected = true;
-        GPIO.blink(led_pin, 2800, 200); // normal blink
-        Log.print(Log.INFO, 'MQTT connected');
-        // publish to the online topic        
-        homie_init();
-        update_state();
-    }
-    else if (ev === MQTT.EV_CLOSE) {
-        mqtt_connected = false;
-        GPIO.blink(led_pin, 200, 200); // fast blink
-        Log.print(Log.ERROR, 'MQTT disconnected');
-    }
-}, null);
+// Register ADC pins
+let apins = [Cfg.get('pins.light_sensor')];
+for (let i=0; i < apins.length; i++) {
+    ADC.enable(apins[i]);
+}
 
-// set clock sync flag
-Event.addHandler(MGOS_EVENT_TIME_CHANGED, function (ev, evdata, ud) {
-    if (Timer.now() > 1577836800 /* 2020-01-01 */) {
-        clock_sync = true;
-        Log.print(Log.INFO, 'mgos clock event: clock sync ok');
-        if (sch_enable) {
-            load_sch();
+// H-Bridge is activated by shorting to ground
+let hpins = [Cfg.get('pins.north_door_raise'), Cfg.get('pins.north_door_lower')];
+for (let i=0; i < hpins.length; i++) {
+    let p = hpins[i];
+    GPIO.set_pull(p, GPIO.PULL_UP);
+    GPIO.setup_output(p, 1); 
+}
+
+// Setup array for interrupt reading pin
+let cpins = [ {
+    pin: Cfg.get('pins.north_door_open_contact'), 
+    last_r: -1
+    },
+    {
+    pin: Cfg.get('pins.north_door_closed_contact'),
+    last_r: -1
+    }
+];
+
+/** 
+ * Register interrupt handlers for contacts.
+*/
+for (let i=0; i < cpins.length; i++) {
+  let cp = cpins[i];
+  GPIO.set_pull(cp.pin, GPIO.PULL_UP);
+  GPIO.set_mode(cp.pin, GPIO.MODE_INPUT);
+  cp.last_r = GPIO.read(cp.pin);
+  GPIO.set_int_handler(cp.pin, GPIO.INT_EDGE_FALLING, function(pin) {
+    // shut the motor down
+    for (let i=0; i < hpins.length; i++) {
+        let p = hpins[i];
+        GPIO.write(p, hbridge_inactive);
+    }
+    let v = GPIO.read(pin);
+    if (v !== cp.last_r) {
+        let disp = 'stuck';
+        if (pin === Cfg.get('pins.north_door_open_contact')) {
+            disp = 'open';
         }
-    } else {
-        Log.print(Log.INFO, 'mgos clock event: clock not sync yet');
+        else if (pin === Cfg.get('pins.north_door_closed_contact')) {
+            disp = 'closed';
+        }
+        MQTT.pub(bstpc + 'north-door/position', disp, 1, true);
+        Log.print(Log.INFO, 'Pin', pin, cp.topic + ' got interrupt: ', v);
+        MQTT.pub(bstpc + cp.topic, v === 0 ? 'false' : 'true');
     }
+    cp.last_r = v;
+  }, null);
+  GPIO.enable_int(cp.pin); 
+}
+
+Timer.set(1000, true, function() {
+  if (device_id === "unknown") {
+    RPC.call(RPC.LOCAL, 'Sys.GetInfo', null, function(resp, ud) {
+      device_id = resp.id;
+      print('Response:', JSON.stringify(resp));
+      print('device ID :', device_id);
+    }, null);
+  }
+
+  let sdata = {
+    dht22: {
+      celsius: dht.getTemp(),
+      fahrenheit: SensorUtils.fahrenheit(dht.getTemp()),
+      rh: dht.getHumidity(),
+    },
+    doors: {
+      north: {
+        position: (GPIO.read(Cfg.get('pins.north_door_open_contact')) === 0) ? 'open' : (GPIO.read(Cfg.get('pins.north_door_closed_contact')) === 0 ? 'closed' : 'stuck')
+      }
+    },
+    light: {
+        luminosity: ADC.read('pins.light_sensor')
+    }
+  };
+
+  print(JSON.stringify(sdata));
+
+  if (counter++ % pubInt === 0 && homie_msg_ix >= homie_setup_msgs.length-1) {
+    let qos = 1;
+    let rtn = true;
+    MQTT.pub(bstpc + '$state', 'ready', 1, true);
+    MQTT.pub(bstpc + 'dht22/rh', JSON.stringify(sdata.dht22.rh), qos, rtn);
+    MQTT.pub(bstpc + 'dht22/tempc', JSON.stringify(sdata.dht22.celsius), qos, rtn);
+    MQTT.pub(bstpc + 'dht22/tempf', JSON.stringify(sdata.dht22.fahrenheit), qos, rtn);
+    MQTT.pub(bstpc + 'north-door/position', JSON.stringify(sdata.doors.north.position), qos, rtn)
+    MQTT.pub(bstpc + 'light-sensor/luminosity', JSON.stringify(sdata.light.luminosity), qos, rtn)
+    MQTT.pub(bstpc + 'ip/address', device_ip, qos, rtn);
+  }
 }, null);
 
-// timer loop to update state and run schedule jobs
-let main_loop_timer = Timer.set(1000 /* 1 sec */, true /* repeat */, function () {
-    tick_count++;
-    if ((tick_count % 60) === 0) { /* 1 min */
-        if (clock_sync) run_sch();
-    }
+// *****************************************************************
+// RPC Handler Registration 
+//
+RPC.addHandler('Temp.Read', function(args) {
+  return { value: dht.getTemp() };
+});
 
-    if ((tick_count % 300) === 0) { /* 5 min */
-        tick_count = 0;
-        if (mqtt_connected) update_state();
-    }
-}, null);
+RPC.addHandler('TempF.Read', function(args) {
+  return { value: SensorUtils.fahrenheit(dht.getTemp()) };
+});
 
-// default: fast blink
-GPIO.setup_output(led_pin, 1);
-GPIO.blink(led_pin, 200, 200);
+RPC.addHandler('RH.Read', function(args) {
+  return { value: dht.getHumidity() };
+});
 
-Log.print(Log.WARN, "### init script started ###");
+RPC.addHandler('NorthDoor.Open', function(args) {
+  let ret = north_door_open();
+  return { value: ret ? "Activated" : "Unchanged"};
+});
+
+RPC.addHandler('NorthDoor.Close', function(args) {
+  let ret = north_door_close();
+  return { value: ret ? "Activated" : "Unchanged"};
+});

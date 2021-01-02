@@ -1,62 +1,85 @@
-name: openhab_sonoff_basic
-author: Michael Fung <hkuser2001@gmail.com>
-description: Sonoff Basic firmware for openHAB
-version: 1.1_20200227r2
-manifest_version: 2017-09-29
+author: mongoose-os
+description: A Mongoose OS app skeleton
+version: 1.0
 
-libs_version: ${mos_version}
-modules_version: ${mos_version}
-mongoose_os_version: ${mos_version}
+libs_version: ${mos.version}
+modules_version: ${mos.version}
+mongoose_os_version: ${mos.version}
 
+# Optional. List of tags for online search.
 tags:
-  - cloud
   - c
+
+# List of files / directories with C sources. No slashes at the end of dir names.
 sources:
   - src
+
+# List of dirs. Files from these dirs will be copied to the device filesystem
 filesystem:
-  - manual/fs
-libs:
-    # common mgos libs
-  - origin: https://github.com/mongoose-os-libs/http-server
-  - origin: https://github.com/mongoose-os-libs/rpc-loopback
-  - origin: https://github.com/mongoose-os-libs/mqtt
-  - origin: https://github.com/mongoose-os-libs/rpc-service-config
-  - origin: https://github.com/mongoose-os-libs/rpc-service-fs
-  - origin: https://github.com/mongoose-os-libs/rpc-uart
-  - origin: https://github.com/mongoose-os-libs/spi
-  - origin: https://github.com/mongoose-os-libs/vfs-dev-spi-flash
-  - origin: https://github.com/mongoose-os-libs/mjs
-  - origin: https://github.com/mongoose-os-libs/wifi
-  - origin: https://github.com/mongoose-os-libs/sntp
+  - fs
+
+# Custom configuration entries, settable via "device configuration"
+# Below is a custom firmware configuration example.
+# Uncomment and modify according to your needs:
 
 config_schema:
-# - ["mjs.generate_jsc", false]
-  - ["mqtt.enable", true]
-  - ["mqtt.server", "openhab.lan:1883"]
-  - ["mqtt.will_message", "OFF"]
-  - ["mqtt.will_retain", true]
-  - ["wifi.ap.ssid", "Sonoff_??????"]
-  - ["wifi.ap.pass", "SonoffBasic"]
-  #- ["wifi.ap.enable", false] # default is true
-  #- ["wifi.sta.enable", true] # default is ???
-  #- ["wifi.ap.keep_enabled", false] # default is true
-  - ["sntp.server", "192.168.0.254"]
-  - ["debug.udp_log_addr", "192.168.0.1:514"]
-  - ["nm","o", {title: "Night Mode settings"}]
-  - ["nm.enable", "b", true, {title: "enable night mode?"}]
-  - ["nm.bh", "i", 23, {title: "begin hour"}]
-  - ["nm.bm", "i", 0, {title: "begin min"}]
-  - ["nm.eh", "i", 6, {title: "end hour"}]
-  - ["nm.em", "i", 30, {title: "end min"}]
-  - ["timer","o", {title: "Timer settings"}]
-  - ["timer.tz", "s", "+0800", {title: "time zone in UTC offset"}]
-  - ["timer.sch_enable", "b", true, {title: "enable schedules?"}]
-  - ["timer.skip_once", "b", false, {title: "skip next schedule once?"}]
+  - ["project.name", "s", "coop", {title: "Project Name"}]
+  - ["garage", "o", {title: "My app custom settings"}]
+  - ["garage.bool_value", "b", false, {title: "Some boolean value"}]
+  - ["garage.string_value", "s", "", {title: "Some string value"}]
+  - ["garage.int_value", "i", 123, {title: "Some integer value"}]
+  - ["time.mqttPubInterval", "i", 60, {title: "How many seconds between MQTT publications"}]
+  - ["time.door_activate_millis", "i",  500, { title: "Milliseconds to leave door relay activated"}]
+  - ["pins.dht_pin", "i", 0, {title: "DHT GPIO Pin"}]
+  - ["pins.north_door_open_contact", "i",  13, { title: "Contact PIN to detect North Door fully open"}]
+  - ["pins.north_door_closed_contact", "i",  12, { title: "Contact PIN to detect North Door fully closed"}]
+  - ["pins.north_door_raise", "i",  14, { title: "Control PIN to raise north door"}]
+  - ["pins.north_door_lower", "i",  15, { title: "Control PIN to lower north door"}]
+  - ["pins.south_door_activation_pin", "i",  4, { title: "GPIO PIN to activate South door opener"}]
+  - ["pins.lightsensor", "i",  0, { title: "ADC PIN to read light level"}]
+  - ["mqtt.server", "s",  "192.168.1.5", { title: "MQTT Server"} ]
+  - ["mqtt.will_topic", "s",  "homie/${device.id}/$state", { title: "MQTT LWT message topic prescribed by Homie 4.0 spec"} ]
+  - ["mqtt.will_message", "s",  "lost", { title: "MQTT LWT message prescribed by Homie 4.0 spec"} ]
+  - ["mqtt.will_retain", "b",  true, { title: "MQTT LWT retention flag"} ]
+  - ["mqtt.enable", "b",  true, { title: "MQTT enabled"} ]
+  - ["mqtt.max_unsent", "i",  35, { title: "Max unsent bytes before sending again"}]
+  - ["homie.pubinterval", "i",  200, { title: "Millis to wait before sending another home cfg msg"}]
+  - ["rpc.mqtt.enable", "b",  true, { title: "MQTT RPC enabled"} ]
 
-platform: esp8266
+# These settings get compiled into the C structure, and can be accessed
+# from the C code this way:
+#
+# printf("Hello from %s!\n", mgos_sys_config_get_device_id());
+#
+# Settings are cool: can be modified remotely without full firmware upgrade!
+#
+# To see all available compiled settings, buid the firmware and open
+# build/gen/mgos_config.h file.
+#
+# Also, in this config_schema section, you can override existing
+# settings that has been created by other libraries. For example, debug log
+# level is 2 by default. For this firmware we can override it to 3:
+#
+# config_schema:
+#  - ["debug.level", 3]
 
-# moved to build script to make using nodemcu easier
-#build_vars:
-  ## sonoff basic has 1MBytes flash only
-  #FLASH_SIZE: 1048576
-  #BOARD: esp8266-1M
+libs:
+  - origin: https://github.com/mongoose-os-libs/boards
+  - origin: https://github.com/mongoose-os-libs/ca-bundle
+  - origin: https://github.com/mongoose-os-libs/rpc-service-config
+  - origin: https://github.com/mongoose-os-libs/rpc-service-fs
+  - origin: https://github.com/mongoose-os-libs/rpc-service-ota
+  - origin: https://github.com/mongoose-os-libs/rpc-uart
+  - origin: https://github.com/mongoose-os-libs/rpc-mqtt
+  - origin: https://github.com/mongoose-os-libs/wifi
+  - origin: https://github.com/mongoose-os-libs/dht
+  - origin: https://github.com/mongoose-os-libs/mjs
+  - origin: https://github.com/mongoose-os-libs/http-server
+  - origin: https://github.com/mongoose-os-libs/ota-http-server 
+  - origin: https://github.com/mongoose-os-libs/mqtt
+  - origin: https://github.com/mongoose-os-libs/dash
+  - origin: https://github.com/mongoose-os-libs/sensor-utils
+  - origin: https://github.com/mongoose-os-libs/adc
+
+# Used by the mos tool to catch mos binaries incompatible with this file format
+manifest_version: 2017-09-29

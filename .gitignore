@@ -38,3 +38,6 @@ tmp/
 build/
 deps/
 .vscode/
+libs/
+.*.swp
+.*.swo

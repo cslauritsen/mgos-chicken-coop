@@ -48,6 +48,10 @@ let pubInt = Cfg.get('time.mqttPubInterval');
 let dht = DHT.create(dht_pin, DHT.DHT22);
 let counter = 0;
 
+
+let open_cpin = Cfg.get('pins.north_door_open_contact');
+let closed_cpin = Cfg.get('pins.north_door_closed_contact');
+
 /**
  * North Door Open Routine
  */
@@ -62,7 +66,7 @@ let north_door_open = function() {
         // activate door lowering circuit, rely on interrupt to switch off
         // when it reaches the bottom
         Log.print(Log.INFO, 'Opening door');
-        GPIO.write(Cfg.get('pins.north_door_raise', hbridge_active));
+        GPIO.write(Cfg.get('pins.north_door_raise'), hbridge_active);
         return true;
     }
     return false;
@@ -72,17 +76,17 @@ let north_door_open = function() {
  * North Door Close Routine
  */
 let north_door_close = function() {
-    if (GPIO.read(Cfg.get('pins.north_door_close_contact')) === 0) {
+    if (GPIO.read(closed_cpin) === 0) {
         // door is already closed, do nothing
         Log.print(Log.INFO, 'Door already closed');
         publish(bstpc + 'north-door/position', 'closed');
         return false;
     }
-    if (GPIO.read(Cfg.get('pins.north_door_open_contact')) === 0) {
+    if (GPIO.read(open_cpin) === 0) {
         // activate motor circuit, rely on interrupt to switch off
         // when it reaches the end
         Log.print(Log.INFO, 'Closing door');
-        GPIO.write(Cfg.get('pins.north_door_lower', hbridge_active));
+        GPIO.write(Cfg.get('pins.north_door_lower'), hbridge_active);
         return true;
     }
     return false;
@@ -221,67 +225,67 @@ let cpins = [ {
     }
 ];
 
-let open_pin = Cfg.get('pins.north_door_open_contact');
-let closed_pin = Cfg.get('pins.north_door_closed_contact');
 let last_closed_r = -1;
 let last_open_r = -1;
 
 /** 
  * Register interrupt handlers for contacts: OPEN
 */
-GPIO.set_pull(open_pin, GPIO.PULL_UP);
-GPIO.set_mode(open_pin, GPIO.MODE_INPUT);
-last_open_r = GPIO.read(open_pin);
-GPIO.set_int_handler(open_pin, GPIO.INT_EDGE_NEG, function(pin) {
+GPIO.set_pull(open_cpin, GPIO.PULL_UP);
+GPIO.set_mode(open_cpin, GPIO.MODE_INPUT);
+last_open_r = GPIO.read(open_cpin);
+GPIO.set_int_handler(open_cpin, GPIO.INT_EDGE_NEG, function(pin) {
+    let v = GPIO.read(pin);
+    print("Interrupt on pin ", pin, ' value ', v);
     // shut the motor down
     for (let i=0; i < hpins.length; i++) {
         let p = hpins[i];
         GPIO.write(p, hbridge_inactive);
     }
-    let v = GPIO.read(pin);
     if (v !== last_open_r) {
         let disp = 'stuck';
-        if (pin === open_pin) {
+        if (pin === open_cpin) {
             disp = 'open';
         }
-        else if (pin === closed_pin) {
+        else if (pin === closed_cpin) {
             disp = 'closed';
         }
         MQTT.pub(bstpc + 'north-door/position', disp, 1, true);
     }
     last_open_r = v;
 }, null);
-GPIO.enable_int(open_pin);
-print("Enabled interrupt on ", open_pin);
+GPIO.enable_int(open_cpin);
+print("Enabled interrupt on ", open_cpin);
 
 
 /** 
  * Register interrupt handlers for contacts: CLOSED
 */
-GPIO.set_pull(closed_pin, GPIO.PULL_UP);
-GPIO.set_mode(closed_pin, GPIO.MODE_INPUT);
-last_closed_r = GPIO.read(closed_pin);
-GPIO.set_int_handler(closed_pin, GPIO.INT_EDGE_NEG, function(pin) {
+GPIO.set_pull(closed_cpin, GPIO.PULL_UP);
+GPIO.set_mode(closed_cpin, GPIO.MODE_INPUT);
+last_closed_r = GPIO.read(closed_cpin);
+GPIO.set_int_handler(closed_cpin, GPIO.INT_EDGE_NEG, function(pin) {
+    let v = GPIO.read(pin);
+    print("Interrupt on pin ", pin, ' value ', v);
     // shut the motor down
     for (let i=0; i < hpins.length; i++) {
         let p = hpins[i];
         GPIO.write(p, hbridge_inactive);
     }
-    let v = GPIO.read(pin);
     if (v !== last_closed_r) {
         let disp = 'stuck';
-        if (pin === open_pin) {
+        if (pin === open_cpin) {
             disp = 'open';
         }
-        else if (pin === closed_pin) {
+        else if (pin === closed_cpin) {
             disp = 'closed';
         }
         MQTT.pub(bstpc + 'north-door/position', disp, 1, true);
     }
     last_closed_r = v;
 }, null);
-GPIO.enable_int(closed_pin);
-print("Enabled interrupt on ", closed_pin);
+GPIO.enable_int(closed_cpin);
+print("Enabled interrupt on ", closed_cpin);
 
 // End interrupt handlers
 
@@ -294,7 +298,7 @@ Timer.set(1000, true, function() {
     },
     doors: {
       north: {
-        position: (GPIO.read(Cfg.get('pins.north_door_open_contact')) === 0) ? 'open' : (GPIO.read(Cfg.get('pins.north_door_closed_contact')) === 0 ? 'closed' : 'stuck')
+        position: (GPIO.read(open_cpin) === 0) ? 'open' : (GPIO.read(closed_cpin) === 0 ? 'closed' : 'stuck')
       }
     },
     light: {

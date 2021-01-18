@@ -32,9 +32,8 @@ let publish = function (topic, msg) {
 
 // define variables
 let client_id = Cfg.get('device.id');
-let thing_id = tolowercase(client_id.slice(client_id.length - 6, client_id.length));
+let thing_id = "coop-" + tolowercase(client_id.slice(client_id.length - 6, client_id.length));
 
-let device_id = Cfg.get('project.name');
 let device_ip = "unknown";
 
 // homie topic root
@@ -52,7 +51,7 @@ let counter = 0;
 /**
  * North Door Open Routine
  */
-let north_door_close = function() {
+let north_door_open = function() {
     if (GPIO.read(Cfg.get('pins.north_door_open_contact')) === 0) {
         // door is already open, do nothing
         Log.print(Log.INFO, 'Door already open');
@@ -154,8 +153,13 @@ let homie_setup_msgs = [
 MQTT.sub(bstpc + '+/+/set', function(conn, topic, msg) {
   print('Topic:', topic, 'message:', msg);
   if (msg === '1' || msg === 'true') {
-    if (topic.indexOf('south-door/activate') !== -1) {
-      activate_door_south();
+    if (topic.indexOf('north-door/position') !== -1) {
+       if (msg === "closed") {
+           north_door_close();
+       }
+       else if (msg === "open") {
+           north_door_open();
+       }
       return;
     }
   }
@@ -191,9 +195,10 @@ Timer.set(Cfg.get("homie.pubinterval"), true, function() {
 }, null);
 
 // Register ADC pins
-let apins = [Cfg.get('pins.light_sensor')];
+let apins = [Cfg.get('pins.lightsensor')];
 for (let i=0; i < apins.length; i++) {
     ADC.enable(apins[i]);
+    print("Enabled ADC on ", apins[i]);
 }
 
 // H-Bridge is activated by shorting to ground
@@ -202,6 +207,7 @@ for (let i=0; i < hpins.length; i++) {
     let p = hpins[i];
     GPIO.set_pull(p, GPIO.PULL_UP);
     GPIO.setup_output(p, 1); 
+    print("GPIO PULL_UP on ", p);
 }
 
 // Setup array for interrupt reading pin
@@ -215,47 +221,71 @@ let cpins = [ {
     }
 ];
 
+let open_pin = Cfg.get('pins.north_door_open_contact');
+let closed_pin = Cfg.get('pins.north_door_closed_contact');
+let last_closed_r = -1;
+let last_open_r = -1;
+
 /** 
- * Register interrupt handlers for contacts.
+ * Register interrupt handlers for contacts: OPEN
 */
-for (let i=0; i < cpins.length; i++) {
-  let cp = cpins[i];
-  GPIO.set_pull(cp.pin, GPIO.PULL_UP);
-  GPIO.set_mode(cp.pin, GPIO.MODE_INPUT);
-  cp.last_r = GPIO.read(cp.pin);
-  GPIO.set_int_handler(cp.pin, GPIO.INT_EDGE_FALLING, function(pin) {
+GPIO.set_pull(open_pin, GPIO.PULL_UP);
+GPIO.set_mode(open_pin, GPIO.MODE_INPUT);
+last_open_r = GPIO.read(open_pin);
+GPIO.set_int_handler(open_pin, GPIO.INT_EDGE_NEG, function(pin) {
     // shut the motor down
     for (let i=0; i < hpins.length; i++) {
         let p = hpins[i];
         GPIO.write(p, hbridge_inactive);
     }
     let v = GPIO.read(pin);
-    if (v !== cp.last_r) {
+    if (v !== last_open_r) {
         let disp = 'stuck';
-        if (pin === Cfg.get('pins.north_door_open_contact')) {
+        if (pin === open_pin) {
             disp = 'open';
         }
-        else if (pin === Cfg.get('pins.north_door_closed_contact')) {
+        else if (pin === closed_pin) {
             disp = 'closed';
         }
         MQTT.pub(bstpc + 'north-door/position', disp, 1, true);
-        Log.print(Log.INFO, 'Pin', pin, cp.topic + ' got interrupt: ', v);
-        MQTT.pub(bstpc + cp.topic, v === 0 ? 'false' : 'true');
     }
-    cp.last_r = v;
-  }, null);
-  GPIO.enable_int(cp.pin); 
-}
+    last_open_r = v;
+}, null);
+GPIO.enable_int(open_pin);
+print("Enabled interrupt on ", open_pin);
+
+
+/** 
+ * Register interrupt handlers for contacts: CLOSED
+*/
+GPIO.set_pull(closed_pin, GPIO.PULL_UP);
+GPIO.set_mode(closed_pin, GPIO.MODE_INPUT);
+last_closed_r = GPIO.read(closed_pin);
+GPIO.set_int_handler(closed_pin, GPIO.INT_EDGE_NEG, function(pin) {
+    // shut the motor down
+    for (let i=0; i < hpins.length; i++) {
+        let p = hpins[i];
+        GPIO.write(p, hbridge_inactive);
+    }
+    let v = GPIO.read(pin);
+    if (v !== last_closed_r) {
+        let disp = 'stuck';
+        if (pin === open_pin) {
+            disp = 'open';
+        }
+        else if (pin === closed_pin) {
+            disp = 'closed';
+        }
+        MQTT.pub(bstpc + 'north-door/position', disp, 1, true);
+    }
+    last_closed_r = v;
+}, null);
+GPIO.enable_int(closed_pin);
+print("Enabled interrupt on ", closed_pin);
+
+// End interrupt handlers
 
 Timer.set(1000, true, function() {
-  if (device_id === "unknown") {
-    RPC.call(RPC.LOCAL, 'Sys.GetInfo', null, function(resp, ud) {
-      device_id = resp.id;
-      print('Response:', JSON.stringify(resp));
-      print('device ID :', device_id);
-    }, null);
-  }
-
   let sdata = {
     dht22: {
       celsius: dht.getTemp(),
@@ -268,7 +298,7 @@ Timer.set(1000, true, function() {
       }
     },
     light: {
-        luminosity: ADC.read('pins.light_sensor')
+        luminosity: ADC.read(Cfg.get('pins.lightsensor'))
     }
   };
 
@@ -281,9 +311,8 @@ Timer.set(1000, true, function() {
     MQTT.pub(bstpc + 'dht22/rh', JSON.stringify(sdata.dht22.rh), qos, rtn);
     MQTT.pub(bstpc + 'dht22/tempc', JSON.stringify(sdata.dht22.celsius), qos, rtn);
     MQTT.pub(bstpc + 'dht22/tempf', JSON.stringify(sdata.dht22.fahrenheit), qos, rtn);
-    MQTT.pub(bstpc + 'north-door/position', JSON.stringify(sdata.doors.north.position), qos, rtn)
-    MQTT.pub(bstpc + 'light-sensor/luminosity', JSON.stringify(sdata.light.luminosity), qos, rtn)
-    MQTT.pub(bstpc + 'ip/address', device_ip, qos, rtn);
+    MQTT.pub(bstpc + 'north-door/position', JSON.stringify(sdata.doors.north.position), qos, rtn);
+    MQTT.pub(bstpc + 'light-sensor/luminosity', JSON.stringify(sdata.light.luminosity), qos, rtn);
   }
 }, null);
 

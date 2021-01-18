@@ -30,7 +30,7 @@ config_schema:
   - ["garage.int_value", "i", 123, {title: "Some integer value"}]
   - ["time.mqttPubInterval", "i", 60, {title: "How many seconds between MQTT publications"}]
   - ["time.door_activate_millis", "i",  500, { title: "Milliseconds to leave door relay activated"}]
-  - ["pins.dht_pin", "i", 0, {title: "DHT GPIO Pin"}]
+  - ["pins.dht", "i", 0, {title: "DHT GPIO Pin"}]
   - ["pins.north_door_open_contact", "i",  13, { title: "Contact PIN to detect North Door fully open"}]
   - ["pins.north_door_closed_contact", "i",  12, { title: "Contact PIN to detect North Door fully closed"}]
   - ["pins.north_door_raise", "i",  14, { title: "Control PIN to raise north door"}]
@@ -43,7 +43,7 @@ config_schema:
   - ["mqtt.will_retain", "b",  true, { title: "MQTT LWT retention flag"} ]
   - ["mqtt.enable", "b",  true, { title: "MQTT enabled"} ]
   - ["mqtt.max_unsent", "i",  35, { title: "Max unsent bytes before sending again"}]
-  - ["homie.pubinterval", "i",  200, { title: "Millis to wait before sending another home cfg msg"}]
+  - ["homie.pubinterval", "i",  200, { title: "Millis to wait before sending another homie cfg msg"}]
   - ["rpc.mqtt.enable", "b",  true, { title: "MQTT RPC enabled"} ]
 
 # These settings get compiled into the C structure, and can be accessed

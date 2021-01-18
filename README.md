@@ -5,9 +5,9 @@ ESP8266 LoLin NodeMCU.
 
 <img src="docs/ESP8266-NodeMCU-kit-12-E-pinout-gpio-pin.png">
 
-It's important to select the correct PINs for the relays so that you don't get cycling as the device resets, powers on, etc. The relays assume they are controlled from a pin pulled high. In other words, they switched on by transitioning their input pin from HI to LO.
+It's important to select the correct PINs for the H-Bridge motor activation so that you don't get cycling as the device resets, powers on, etc. The motors are controlled from a pin pulled low and a clockwise or counter-clockwise rotation happens by triggering a pin HI. 
 
-In this case, I'm using GPIO 4 to control the south door relay.
+In this case, I'm using GPIO 4 & 5 to control the north door motor.
 
 # Features
  * Door open/close detection and desired state transition

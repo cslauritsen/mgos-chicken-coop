@@ -1,104 +1,59 @@
-## A Sonoff Basic firmware to work with openHAB
+# Chicken Coop Mongoose OS app
 
-This firmware drives Sonoff Basic from [iTead Studio](https://www.itead.cc/),
-and powered by [Mongoose OS](https://mongoose-os.com/).
-It targets to work with openHAB 2.4 or newer using the MQTT binding.
+# Hardware Platform
+ESP8266 LoLin NodeMCU. 
 
-### Features
+<img src="docs/ESP8266-NodeMCU-kit-12-E-pinout-gpio-pin.png">
 
-* LED blink pattern to indicate connectivity
-* On board button to toggle the switch manually in case of no connectivity
-* Bounce protection
-* Device local schedule timer
-* Countdown timer to toggle the switch
-* Switch ON duration counter for energy consumption analysis
-* Night Mode to turn off status LED
-* Web interface for setting up WiFi SSID and password
-* Reset to firmware defaults by holding the on board button for over 5 seconds
+It's important to select the correct PINs for the relays so that you don't get cycling as the device resets, powers on, etc. The relays assume they are controlled from a pin pulled high. In other words, they switched on by transitioning their input pin from HI to LO.
 
-### Configuration options
+In this case, I'm using GPIO 4 to control the south door relay.
 
-You have 2 options to implement this firmware:
+# Features
+ * Door open/close detection and desired state transition
+ * Luminosity Sensor
+ * DHT22 temp/humidity readings
+ * MQTT publishing
+ * HTTP/MQTT RPC Control
+ * OTA Firmware Updating
 
-1. automatic configuration by Homie Convention
+ # Desired State 
+ The coop has one automated door. It has reed sensors to detect 2 states, fully open and fully closed. Additionally it includes RPC mechanisms to instruct the device to transition the door from one state to a desired state. It uses an H-Bridge to run the motor in one direction or the other and monitors the door so that the motor will be stopped when its desired state is reached, or a maximum amount of time has elapsed.
 
-[Homie Convention](https://homieiot.github.io/) enables auto-discovery of the device by openHAB.
-Things, Channels and Items will be automatically setup.
+ The maximum time functions as a backstop to prevent the motor from burning out if it gets stuck, for instance.
 
-2. manual configuration with text files
+ ## HTTP
+ Issue an HTTP get like so, no paylaod is required. 
+ ### Desired State: Closed
+ ```bash
+ curl http://192.168.1.xxx/rpc/NorthDoor.Close
+ ```
 
-### openHAB UI
+ ### Desired State: Open
+ ```bash
+ curl http://192.168.1.xxx/rpc/NorthDoor.Open
+ ```
 
-![openHAB UI](images/openhab-ui.jpg)
+ ## MQTT RPC
+ you can send a command via MQTT. This means you don't need to have a static IP for the device, but you will need to know its unique ID. I'm working on enabling auto-discovery in services like OpenHAB by leveraging via the [homie convention](https://homieiot.github.io).
 
-![energy consumption chart](images/energy-chart.png "energy consumption chart")
+In the example below, "alpha" is "correlation ID", that is, an identifier that will be echoed back by the node in response to an RPC request which will contain information about the node's response, errors, etc. 
 
-### Build for Homie support
+ ```bash
+ mqttpub -h 192.168.1.5 \
+    -t esp8266_7E5E96/rpc  \
+    '{id: 1, "src":"alpha", "method": "NorthDoor.Open"}' 
+ ```
 
-Build using default cloud service:
+## MQTT Trigger
+TODO: It would be simpler in (especially for OpenHAB) if the relay activation could be triggered simply by the arrival of any message body `1` to a set topic, rather than having to craft and send a JSON document per MongooseOS' RPC requirements.
 
+
+# OTA Firmware Update
+When you use the `mos flash` command certain configurations parameters (like WiFi) configuration are lost.
+
+The simplest method is to use an HTTP POST:
+```bash
+cd project-repo-root
+curl -i -F filedata=@./build/fw.zip http://192.168.1.xxx/update
 ```
-cat mos-homie.yml > mos.yml
-mos build --platform esp8266 \
-  --build-var FLASH_SIZE=1048576 --build-var BOARD=esp8266-1M
-```
-
-### Build for manual configuration
-
-Build using default cloud service:
-
-```
-cat mos-manual.yml > mos.yml
-mos build --platform esp8266 \
-  --build-var FLASH_SIZE=1048576 --build-var BOARD=esp8266-1M
-```
-
-### Flash
-
-Sonoff Basic has only 1Mbytes flash.
-
-	mos flash --esp-flash-params "dout,8m,40m"
-
-### WiFi Setup
-
-1. Switch your PC or smartphone to the device's WiFi network. The SSID is named like **Sonoff_??????**,
-and the password is `SonoffBasic`.
-
-2. Use your browser to open http://192.168.4.1/
-
-### openHAB Configuration
-
-If you choose the manual configration option, please check the `manual` folder.
-
-### Local schedule timer
-
-Before using the local timer, make sure to set correct time zone via `timer.tz`.
-
-For Example, a Hong Kong user:
-
-    mos config-set timer.tz=+0800
-
-And a user in California (DST):
-
-    mos config-set timer.tz=-0700
-
-Then, create a JSON file `schedules.json` and upload to the filesystem. Please reference the
-supplied sample for syntax.
-
-### Countdown timer
-
-When the countdown timer reached zero, the switch will be toggled.
-
-The local schedule timer will be disabled until the countdown is completed.
-
-This timer is not persisted across reboots.
-
-### Night Mode
-
-Example: set night mode from 23:00 to 6:30:
-    
-	mos config-set nm.enable=true nm.bh=23 nm.bm=0 nm.eh=6 nm.em=30
-
-### Reset to firmware defaults
-
-Press and hold the on board button for over 5 seconds.

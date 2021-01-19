@@ -46,6 +46,7 @@ config_schema:
   - ["mqtt.max_unsent", "i",  35, { title: "Max unsent bytes before sending again"}]
   - ["homie.pubinterval", "i",  200, { title: "Millis to wait before sending another homie cfg msg"}]
   - ["rpc.mqtt.enable", "b",  true, { title: "MQTT RPC enabled"} ]
+  - ["debug.udp_log_addr", "s",  "192.168.1.5:31337", { title: "UDP log target"} ]
 
 # These settings get compiled into the C structure, and can be accessed
 # from the C code this way:

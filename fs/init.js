@@ -54,7 +54,7 @@ load('api_mqtt.js');
 
 let nm = Cfg.get('project.name');
 let dht_pin = Cfg.get('pins.dht');
-print('dht_pin:', dht_pin);
+Log.print(Log.INFO, 'dht_pin:', dht_pin);
 let pubInt = Cfg.get('time.mqttPubInterval');
 let dht = DHT.create(dht_pin, DHT.DHT22);
 let counter = 0;
@@ -122,7 +122,7 @@ let homie_setup_msgs = [
 
 // subscribe to homie set commands
 MQTT.sub(bstpc + '+/+/set', function(conn, topic, msg) {
-  print('Topic:', topic, 'message:', msg);
+  Log.print(Log.INFO, 'Topic:', topic, 'message:', msg);
   if (msg === '1' || msg === 'true') {
     if (topic.indexOf('north-door/position') !== -1) {
        if (msg === "closed") {
@@ -134,9 +134,9 @@ MQTT.sub(bstpc + '+/+/set', function(conn, topic, msg) {
       return;
     }
   }
-  print("Message ", msg, ' was ignored');
+  Log.print(Log.INFO, "Message ", msg, ' was ignored');
 }, null);
-print('subscribed');
+Log.print(Log.INFO, 'subscribed');
 
 let homie_msg_ix = 0;
 let homie_init = false;
@@ -144,19 +144,19 @@ let homie_init = false;
 // Asynchronously advance through the homie setup stuff until done
 Timer.set(Cfg.get("homie.pubinterval"), true, function() {
   if (!MQTT.isConnected()) {
-    print('Waiting for MQTT connect...');
+    Log.print(Log.INFO, 'Waiting for MQTT connect...');
     return;
   }
   let br = mgos_mqtt_num_unsent_bytes();
   let maxbr = Cfg.get("mqtt.max_unsent");
   if (br > maxbr) {
-    print('home setup: waiting for MQTT queue to clear: ', br);
+    Log.print(Log.INFO, 'home setup: waiting for MQTT queue to clear: ', br);
   }
   if (homie_msg_ix >= 0 && homie_msg_ix < homie_setup_msgs.length) {
     let msg = homie_setup_msgs[homie_msg_ix];
     let ret = MQTT.pub(msg.t, msg.m, 2, msg.retain);
     if (ret === 0) {
-      print("homie pub failed: ", ret);
+      Log.print(Log.INFO, "homie pub failed: ", ret);
     }
     else {
       // if publication was successful, on the next go around, send the next message
@@ -169,7 +169,7 @@ Timer.set(Cfg.get("homie.pubinterval"), true, function() {
 let apins = [Cfg.get('pins.lightsensor')];
 for (let i=0; i < apins.length; i++) {
     ADC.enable(apins[i]);
-    print("Enabled ADC on ", apins[i]);
+    Log.print(Log.INFO, "Enabled ADC on ", apins[i]);
 }
 
 Timer.set(1000, true, function() {
@@ -189,17 +189,21 @@ Timer.set(1000, true, function() {
     }
   };
 
-  print(JSON.stringify(sdata));
+  Log.print(Log.INFO, JSON.stringify(sdata));
 
   if (sdata.light.luminosity >= 0 && sdata.light.luminosity <= 1024) {
-    if (sdata.light.luminosity <= open_thresh) {
-      print('Opening doors lum val ', sdata.light.luminosity);
+    Log.print(Log.INFO, "Luminosity check within range: ", sdata.light.luminosity);
+    if (sdata.light.luminosity <= open_thresh && "closed" === Door_status(north_door)) {
+      Log.print(Log.INFO, 'Opening doors lum val ', sdata.light.luminosity);
       Door_open(north_door);
     }
-    if (sdata.light.luminosity >= close_thresh) {
-      print('Closing doors lum val ', sdata.light.luminosity);
+    if (sdata.light.luminosity >= close_thresh && "open" === Door_status(north_door)) {
+      Log.print(Log.INFO, 'Closing doors lum val ', sdata.light.luminosity);
       Door_close(north_door);
     }
+  }
+  else {
+    Log.print(Log.INFO, "Luminosity not within acceptable range.");
   }
 
   if (counter++ % pubInt === 0 && homie_msg_ix >= homie_setup_msgs.length-1) {

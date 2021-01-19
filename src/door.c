@@ -10,11 +10,12 @@
 
 struct timer_data {
     Door *door;
-    mgos_timer_id timer_id;
     DoorState desired_state;
     double start_uptime;
     double max_run_seconds;
 };
+
+static mgos_timer_id timer_id = MGOS_INVALID_TIMER_ID;
 
 DoorState Door_get_state(Door *door) {
     // false->low voltage means state active, as these 
@@ -46,7 +47,10 @@ static void transition_cb(void *arg) {
     struct timer_data *td = (struct timer_data *) arg;
     if (td->desired_state == Door_get_state(td->door) || mgos_uptime() - td->start_uptime > td->max_run_seconds) {
         Door_all_stop(td->door);
-        mgos_clear_timer(td->timer_id);
+        if (timer_id != MGOS_INVALID_TIMER_ID) {
+            mgos_clear_timer(timer_id);
+            timer_id = MGOS_INVALID_TIMER_ID;
+        }
         free(td);
     }
 }
@@ -83,7 +87,11 @@ bool Door_transition(Door *door, DoorState desiredState) {
     td->desired_state = desiredState;
     td->start_uptime = mgos_uptime();
     td->max_run_seconds = (double) mgos_sys_config_get_time_door_motor_active_seconds();
-    td->timer_id = mgos_set_timer(250, MGOS_TIMER_REPEAT, transition_cb, td);
+    if (timer_id != MGOS_INVALID_TIMER_ID) {
+        mgos_clear_timer(timer_id);
+        timer_id = MGOS_INVALID_TIMER_ID;
+    }
+    timer_id = mgos_set_timer(250, MGOS_TIMER_REPEAT, transition_cb, td);
 
     if (DOOR_OPEN == desiredState) {
         _Door_open(door);
@@ -130,13 +138,13 @@ char *Door_status(void * vdoor) {
     Door *door = (Door *) vdoor;
     switch(Door_get_state(door)) {
         case DOOR_OPEN:
-        return "open";
+            return "open";
         case DOOR_CLOSED:
-        return "closed";
+            return "closed";
         case DOOR_STUCK:
-        return "stuck";
+            return "stuck";
         default:
-        return "unknown";
+            return "unknown";
     }
 }
 

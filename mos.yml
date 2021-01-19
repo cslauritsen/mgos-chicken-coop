@@ -36,6 +36,8 @@ config_schema:
   - ["pins.north_door_raise", "i",  4, { title: "Control PIN to raise north door, driven LOW on startup"}]
   - ["pins.north_door_lower", "i",  5, { title: "Control PIN to lower north door, driven LOW on startup"}]
   - ["pins.lightsensor", "i",  0, { title: "ADC PIN to read light level"}]
+  - ["luminosity.openThreshold", "i",  300, { title: "Values below which the door will auto-open"}]
+  - ["luminosity.closeThreshold", "i",  900, { title: "Values above which the door will auto-close"}]
   - ["mqtt.server", "s",  "192.168.1.5", { title: "MQTT Server"} ]
   - ["mqtt.will_topic", "s",  "homie/${device.id}/$state", { title: "MQTT LWT message topic prescribed by Homie 4.0 spec"} ]
   - ["mqtt.will_message", "s",  "lost", { title: "MQTT LWT message prescribed by Homie 4.0 spec"} ]

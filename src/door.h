@@ -17,11 +17,17 @@ typedef struct {
 } Door;
 
 
+#define DOOR_HBRIDGE_ACTIVE 1
+#define DOOR_HBRIDGE_INACTIVE 0
+
 DoorState Door_get_state(Door *door);
 void Door_all_stop(Door *door);
-bool Door_open(Door *door);
-bool Door_close(Door *door);
-void Door_transition(Door *door, DoorState desiredState);
+bool Door_transition(Door *door, DoorState desiredState);
 void Door_init(Door *door);
-Door * Door_new(int open_contact, int closed_contact, int lower_act_pin, int raise_act_pin);
+Door * Door_new(int open_contact, int closed_contact, int lower_act_pin, int raise_act_pin, char* name);
+// FFI wrappers
+void* Door_north_new(void);
+char* Door_status(void* door);
+bool Door_close(void* door);
+bool Door_open(void *door);
 #endif

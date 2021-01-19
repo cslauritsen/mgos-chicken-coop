@@ -7,8 +7,6 @@ load('api_sensor_utils.js');
 load('api_adc.js');
 load('api_log.js');
 
-let hbridge_active = 1;
-let hbridge_inactive = 0;
 // helpers
 // (convert A-Z to a-z)
 let tolowercase = function (s) {
@@ -23,6 +21,16 @@ let tolowercase = function (s) {
 };
 // string to integer
 let str2int = ffi('int str2int(char *)');
+let Door_north_new = ffi('void * Door_north_new(void)');
+let Door_status = ffi('char * Door_status(void *)');
+let Door_close = ffi('bool Door_close(void *)');
+let Door_open = ffi('bool Door_open(void *)');
+
+let open_thresh = Cfg.get('luminosity.openThreshold');
+let close_thresh = Cfg.get('luminosity.closeThreshold');
+
+let north_door = Door_north_new();
+
 // mqtt pub wrapper
 let publish = function (topic, msg) {
     let ok = MQTT.pub(topic, msg, 1, true);	// QoS = 1, retain
@@ -36,6 +44,9 @@ let thing_id = "coop-" + tolowercase(client_id.slice(client_id.length - 6, clien
 
 let device_ip = "unknown";
 
+let closed_cpin = Cfg.get('pins.north_door_closed_contact');
+let open_cpin = Cfg.get('pins.north_door_open_contact');
+
 // homie topic root
 let bstpc = 'homie/' + thing_id + '/';
 Cfg.set({mqtt: {will_topic: bstpc + '$state'}});
@@ -47,50 +58,6 @@ print('dht_pin:', dht_pin);
 let pubInt = Cfg.get('time.mqttPubInterval');
 let dht = DHT.create(dht_pin, DHT.DHT22);
 let counter = 0;
-
-
-let open_cpin = Cfg.get('pins.north_door_open_contact');
-let closed_cpin = Cfg.get('pins.north_door_closed_contact');
-
-/**
- * North Door Open Routine
- */
-let north_door_open = function() {
-    if (GPIO.read(Cfg.get('pins.north_door_open_contact')) === 0) {
-        // door is already open, do nothing
-        Log.print(Log.INFO, 'Door already open');
-        publish(bstpc + 'north-door/position', 'open');
-        return false;
-    }
-    if (GPIO.read(Cfg.get('pins.north_door_closed_contact')) === 0) {
-        // activate door lowering circuit, rely on interrupt to switch off
-        // when it reaches the bottom
-        Log.print(Log.INFO, 'Opening door');
-        GPIO.write(Cfg.get('pins.north_door_raise'), hbridge_active);
-        return true;
-    }
-    return false;
-};
-
-/**
- * North Door Close Routine
- */
-let north_door_close = function() {
-    if (GPIO.read(closed_cpin) === 0) {
-        // door is already closed, do nothing
-        Log.print(Log.INFO, 'Door already closed');
-        publish(bstpc + 'north-door/position', 'closed');
-        return false;
-    }
-    if (GPIO.read(open_cpin) === 0) {
-        // activate motor circuit, rely on interrupt to switch off
-        // when it reaches the end
-        Log.print(Log.INFO, 'Closing door');
-        GPIO.write(Cfg.get('pins.north_door_lower'), hbridge_active);
-        return true;
-    }
-    return false;
-};
 
 let mgos_mqtt_num_unsent_bytes = ffi('int mgos_mqtt_num_unsent_bytes(void)');
 
@@ -159,10 +126,10 @@ MQTT.sub(bstpc + '+/+/set', function(conn, topic, msg) {
   if (msg === '1' || msg === 'true') {
     if (topic.indexOf('north-door/position') !== -1) {
        if (msg === "closed") {
-           north_door_close();
+           Door_close(north_door);
        }
        else if (msg === "open") {
-           north_door_open();
+           Door_open(north_door);
        }
       return;
     }
@@ -205,90 +172,6 @@ for (let i=0; i < apins.length; i++) {
     print("Enabled ADC on ", apins[i]);
 }
 
-// H-Bridge is activated by shorting to ground
-let hpins = [Cfg.get('pins.north_door_raise'), Cfg.get('pins.north_door_lower')];
-for (let i=0; i < hpins.length; i++) {
-    let p = hpins[i];
-    GPIO.set_pull(p, GPIO.PULL_UP);
-    GPIO.setup_output(p, 1); 
-    print("GPIO PULL_UP on ", p);
-}
-
-// Setup array for interrupt reading pin
-let cpins = [ {
-    pin: Cfg.get('pins.north_door_open_contact'), 
-    last_r: -1
-    },
-    {
-    pin: Cfg.get('pins.north_door_closed_contact'),
-    last_r: -1
-    }
-];
-
-let last_closed_r = -1;
-let last_open_r = -1;
-
-/** 
- * Register interrupt handlers for contacts: OPEN
-*/
-GPIO.set_pull(open_cpin, GPIO.PULL_UP);
-GPIO.set_mode(open_cpin, GPIO.MODE_INPUT);
-last_open_r = GPIO.read(open_cpin);
-GPIO.set_int_handler(open_cpin, GPIO.INT_EDGE_NEG, function(pin) {
-    let v = GPIO.read(pin);
-    print("Interrupt on pin ", pin, ' value ', v);
-    // shut the motor down
-    for (let i=0; i < hpins.length; i++) {
-        let p = hpins[i];
-        GPIO.write(p, hbridge_inactive);
-    }
-    if (v !== last_open_r) {
-        let disp = 'stuck';
-        if (pin === open_cpin) {
-            disp = 'open';
-        }
-        else if (pin === closed_cpin) {
-            disp = 'closed';
-        }
-        MQTT.pub(bstpc + 'north-door/position', disp, 1, true);
-    }
-    last_open_r = v;
-}, null);
-GPIO.enable_int(open_cpin);
-print("Enabled interrupt on ", open_cpin);
-
-
-/** 
- * Register interrupt handlers for contacts: CLOSED
-*/
-GPIO.set_pull(closed_cpin, GPIO.PULL_UP);
-GPIO.set_mode(closed_cpin, GPIO.MODE_INPUT);
-last_closed_r = GPIO.read(closed_cpin);
-GPIO.set_int_handler(closed_cpin, GPIO.INT_EDGE_NEG, function(pin) {
-    let v = GPIO.read(pin);
-    print("Interrupt on pin ", pin, ' value ', v);
-    // shut the motor down
-    for (let i=0; i < hpins.length; i++) {
-        let p = hpins[i];
-        GPIO.write(p, hbridge_inactive);
-    }
-    if (v !== last_closed_r) {
-        let disp = 'stuck';
-        if (pin === open_cpin) {
-            disp = 'open';
-        }
-        else if (pin === closed_cpin) {
-            disp = 'closed';
-        }
-        MQTT.pub(bstpc + 'north-door/position', disp, 1, true);
-    }
-    last_closed_r = v;
-}, null);
-GPIO.enable_int(closed_cpin);
-print("Enabled interrupt on ", closed_cpin);
-
-// End interrupt handlers
-
 Timer.set(1000, true, function() {
   let sdata = {
     dht22: {
@@ -298,7 +181,7 @@ Timer.set(1000, true, function() {
     },
     doors: {
       north: {
-        position: (GPIO.read(open_cpin) === 0) ? 'open' : (GPIO.read(closed_cpin) === 0 ? 'closed' : 'stuck')
+        position: Door_status(north_door)
       }
     },
     light: {
@@ -307,6 +190,17 @@ Timer.set(1000, true, function() {
   };
 
   print(JSON.stringify(sdata));
+
+  if (sdata.light.luminosity >= 0 && sdata.light.luminosity <= 1024) {
+    if (sdata.light.luminosity <= open_thresh) {
+      print('Opening doors lum val ', sdata.light.luminosity);
+      Door_open(north_door);
+    }
+    if (sdata.light.luminosity >= close_thresh) {
+      print('Closing doors lum val ', sdata.light.luminosity);
+      Door_close(north_door);
+    }
+  }
 
   if (counter++ % pubInt === 0 && homie_msg_ix >= homie_setup_msgs.length-1) {
     let qos = 1;
@@ -336,11 +230,9 @@ RPC.addHandler('RH.Read', function(args) {
 });
 
 RPC.addHandler('NorthDoor.Open', function(args) {
-  let ret = north_door_open();
-  return { value: ret ? "Activated" : "Unchanged"};
+  return { value: Door_open(north_door) ? "Opening" : "Unchanged" };
 });
 
 RPC.addHandler('NorthDoor.Close', function(args) {
-  let ret = north_door_close();
-  return { value: ret ? "Activated" : "Unchanged"};
+  return { value: Door_close(north_door) ? "Closing" : "Unchanged" };
 });

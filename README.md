@@ -5,7 +5,7 @@ ESP8266 LoLin NodeMCU.
 
 <img src="docs/ESP8266-NodeMCU-kit-12-E-pinout-gpio-pin.png">
 
-It's important to select the correct PINs for the H-Bridge motor activation so that you don't get cycling as the device resets, powers on, etc. The motors are controlled from a pin pulled low and a clockwise or counter-clockwise rotation happens by triggering a pin HI. 
+It's important to select the correct PINs for the H-Bridge motor activation so that you don't get cycling as the device resets, powers on, etc. The motors H-Bridge is are controlled by 2 GPIO pins pulled low. Clockwise or counter-clockwise rotation starts by setting respective pins HI. I don't know what happens if both pins are set to HI, I suppose it could burn out the H-Bridge or the motor so this is something I try to have the code avoid at all times.
 
 In this case, I'm using GPIO 4 & 5 to control the north door motor.
 

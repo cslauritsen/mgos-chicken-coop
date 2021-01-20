@@ -23,8 +23,8 @@ let tolowercase = function (s) {
 let str2int = ffi('int str2int(char *)');
 let Door_north_new = ffi('void * Door_north_new(void)');
 let Door_status = ffi('char * Door_status(void *)');
-let Door_close = ffi('bool Door_close(void *)');
-let Door_open = ffi('bool Door_open(void *)');
+let Door_close = ffi('bool Door_close(void *, int)');
+let Door_open = ffi('bool Door_open(void *, int)');
 
 let open_thresh = Cfg.get('luminosity.openThreshold');
 let close_thresh = Cfg.get('luminosity.closeThreshold');
@@ -126,10 +126,10 @@ MQTT.sub(bstpc + '+/+/set', function(conn, topic, msg) {
   if (msg === '1' || msg === 'true') {
     if (topic.indexOf('north-door/position') !== -1) {
        if (msg === "closed") {
-           Door_close(north_door);
+           Door_close(north_door, 0);
        }
        else if (msg === "open") {
-           Door_open(north_door);
+           Door_open(north_door, 0);
        }
       return;
     }
@@ -142,7 +142,11 @@ let homie_msg_ix = 0;
 let homie_init = false;
 
 // Asynchronously advance through the homie setup stuff until done
-Timer.set(Cfg.get("homie.pubinterval"), true, function() {
+let homie_timer = Timer.set(Cfg.get("homie.pubinterval"), true, function() {
+  if (homie_msg_ix >= homie_setup_msgs.length) {
+    // We're done with homie setup, clear the timer
+    Timer.del(homie_timer);
+  }
   if (!MQTT.isConnected()) {
     Log.print(Log.INFO, 'Waiting for MQTT connect...');
     return;
@@ -189,21 +193,21 @@ Timer.set(1000, true, function() {
     }
   };
 
-  Log.print(Log.INFO, JSON.stringify(sdata));
+  Log.print(Log.DEBUG, JSON.stringify(sdata));
 
   if (sdata.light.luminosity >= 0 && sdata.light.luminosity <= 1024) {
-    Log.print(Log.INFO, "Luminosity check within range: ", sdata.light.luminosity);
+    Log.print(Log.INFO, "Luminosity check within range " + JSON.stringify(open_thresh) +  ".." + JSON.stringify(close_thresh) +  ": " + JSON.stringify(sdata.light.luminosity));
     if (sdata.light.luminosity <= open_thresh && "closed" === Door_status(north_door)) {
-      Log.print(Log.INFO, 'Opening doors lum val ', sdata.light.luminosity);
-      Door_open(north_door);
+      Log.print(Log.INFO, 'Opening doors lum val ' + JSON.stringify(sdata.light.luminosity));
+      Door_open(north_door, 1);
     }
     if (sdata.light.luminosity >= close_thresh && "open" === Door_status(north_door)) {
-      Log.print(Log.INFO, 'Closing doors lum val ', sdata.light.luminosity);
-      Door_close(north_door);
+      Log.print(Log.INFO, 'Closing doors lum val ' + JSON.stringify(sdata.light.luminosity));
+      Door_close(north_door, 1);
     }
   }
   else {
-    Log.print(Log.INFO, "Luminosity not within acceptable range.");
+    Log.print(Log.ERROR, "Luminosity reading not within acceptable range.");
   }
 
   if (counter++ % pubInt === 0 && homie_msg_ix >= homie_setup_msgs.length-1) {
@@ -234,9 +238,12 @@ RPC.addHandler('RH.Read', function(args) {
 });
 
 RPC.addHandler('NorthDoor.Open', function(args) {
-  return { value: Door_open(north_door) ? "Opening" : "Unchanged" };
+  return { value: Door_open(north_door, 0) ? "Opening" : "Unchanged" };
 });
 
 RPC.addHandler('NorthDoor.Close', function(args) {
-  return { value: Door_close(north_door) ? "Closing" : "Unchanged" };
+  return { value: Door_close(north_door, 0) ? "Closing" : "Unchanged" };
+});
+RPC.addHandler('NorthDoor.Status', function(args) {
+  return { value: Door_status(north_door) };
 });

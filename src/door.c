@@ -7,7 +7,6 @@
 #include <mgos_time.h>
 #include "door.h"
 
-
 struct timer_data {
     Door *door;
     DoorState desired_state;
@@ -18,8 +17,8 @@ struct timer_data {
 static mgos_timer_id timer_id = MGOS_INVALID_TIMER_ID;
 
 DoorState Door_get_state(Door *door) {
-    // false->low voltage means state active, as these 
-    // are connected reed switches with pullup resistors active
+    // false->low voltage means switch closed & state active, since these 
+    // are ground-connected reed switches with pullup resistors
     bool isclosed = ! mgos_gpio_read(door->closed_contact_pin);
     bool isopen = ! mgos_gpio_read(door->open_contact_pin);
 
@@ -44,8 +43,17 @@ void Door_all_stop(Door *door) {
  *  b. the maximum motor run time is reached
  */
 static void transition_cb(void *arg) {
+    if (arg == NULL) {
+        LOG(LL_ERROR, ("Invalid NULL callback arg"));
+        return;
+    }
     struct timer_data *td = (struct timer_data *) arg;
-    if (td->desired_state == Door_get_state(td->door) || mgos_uptime() - td->start_uptime > td->max_run_seconds) {
+    DoorError de = Door_validate(td->door);
+    if (DE_OK != de) {
+        LOG(LL_ERROR, ("Door validation failed: %d", de));
+    }
+    // See if its time to stop the timer
+    if (DE_OK != de || td->desired_state == Door_get_state(td->door) || mgos_uptime() - td->start_uptime > td->max_run_seconds) {
         Door_all_stop(td->door);
         if (timer_id != MGOS_INVALID_TIMER_ID) {
             mgos_clear_timer(timer_id);
@@ -55,7 +63,7 @@ static void transition_cb(void *arg) {
     }
 }
 
-static bool _Door_open(Door *door) { 
+static bool _Door_open(Door *door) {
     if (DOOR_OPEN == Door_get_state(door)) {
         LOG(LL_INFO, ("Door %s already open, doing nothing", door->name));
         return false; 
@@ -75,11 +83,32 @@ static bool _Door_close(Door *door) {
     return true;
 }
 
-bool Door_transition(Door *door, DoorState desiredState) {
+bool Door_transition(Door *door, DoorState desiredState, int flags) {
+    if (Door_validate(door) != DE_OK) {
+        return false;
+    }
+
     Door_all_stop(door);
     if (desiredState != DOOR_OPEN && desiredState != DOOR_CLOSED) {
         LOG(LL_INFO, ("Invalid door transition request, doing nothing"));
         return false;
+    }
+
+    // Attempt to limit the number of light-based triggerings
+    if (DF_ISSET(flags, DF_LIGHT_TRIG)) {
+        double min_seconds = mgos_sys_config_get_time_light_trigger_min_hours() * 3600;
+        double seconds_since_last = mgos_uptime() - door->last_light_trigger;
+        if (door->last_light_trigger > 0  && seconds_since_last > min_seconds) {
+            LOG(LL_INFO, ("Insufficient seconds elapsed for light-triggered transition: %f", seconds_since_last));
+            // not enough time has elapsed to permit another light-based trigger
+            // therefore, ignore this request
+            return false;
+        }
+        // Either this is the first light-triggered transition since boot, or
+        // enough time has elapsed since the last light-triggered transition, or
+        // the last trigger has been reset. 
+        // Record the current trigger time and proceed with the transition
+        door->last_light_trigger = mgos_uptime();
     }
 
     struct timer_data *td = calloc(1, sizeof(struct timer_data));
@@ -112,6 +141,7 @@ void Door_init(Door *door) {
 
 Door * Door_new(int open_contact, int closed_contact, int lower_act_pin, int raise_act_pin, char *name) {
     Door *door = calloc(1, sizeof(Door));
+    door->struct_id = DOOR_STRUCT_ID;
     door->open_contact_pin = open_contact;
     door->closed_contact_pin = closed_contact;
     door->lower_activate_pin = lower_act_pin;
@@ -148,12 +178,49 @@ char *Door_status(void * vdoor) {
     }
 }
 
-bool Door_close(void *adoor) {
+bool Door_close(void *adoor, int flags) {
     Door *door = (Door *) adoor;
-    return Door_transition(door, DOOR_CLOSED);
+    return Door_transition(door, DOOR_CLOSED, flags);
 }
 
-bool Door_open(void *adoor) {
+bool Door_open(void *adoor, int flags) {
     Door *door = (Door *) adoor;
-    return Door_transition(door, DOOR_OPEN);
+    return Door_transition(door, DOOR_OPEN, flags);
+}
+
+DoorError Door_validate(void * arg) {
+  if (arg == NULL) {
+    LOG(LL_ERROR, ("Invalid NULL door arg"));
+    return DE_NULL;
+  }
+  Door *door = (Door *) arg;
+  if (DOOR_STRUCT_ID != door->struct_id) {
+    LOG(LL_ERROR, ("Unrecognized door structure"));
+    return DE_STRUCT_ID;
+  }
+  if (!IS_PIN(door->closed_contact_pin)) {
+    LOG(LL_ERROR, ("Invalid closed contact pin %d", door->closed_contact_pin));
+    return DE_BAD_PIN;
+  }
+  if (!IS_PIN(door->open_contact_pin)) {
+    LOG(LL_ERROR, ("Invalid open contact pin %d", door->open_contact_pin));
+    return DE_BAD_PIN;
+  }
+  if (!IS_PIN(door->lower_activate_pin)) {
+    LOG(LL_ERROR, ("Invalid lower activate pin %d", door->lower_activate_pin));
+    return DE_BAD_PIN;
+  }
+  if (!IS_PIN(door->raise_activate_pin)) {
+    LOG(LL_ERROR, ("Invalid raise activate pin %d", door->raise_activate_pin));
+    return DE_BAD_PIN;
+  }
+  if (door->name == NULL) { 
+    LOG(LL_ERROR, ("Invalid door name"));
+    return DE_NAME_LEN;
+  }
+  if (strnlen(door->name, sizeof(door->name)) >= sizeof(door->name)) {
+    LOG(LL_ERROR, ("Door name too long"));
+    return DE_NAME_LEN;
+  }
+  return DE_OK;
 }

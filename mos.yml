@@ -30,6 +30,7 @@ config_schema:
   - ["garage.int_value", "i", 123, {title: "Some integer value"}]
   - ["time.mqttPubInterval", "i", 60, {title: "How many seconds between MQTT publications"}]
   - ["time.door_motor_active_seconds", "i",  10, { title: "Maximum seconds door motor should ever run"}]
+  - ["time.light_trigger_min_hours", "i",  5, { title: "Minimum hours between light-based triggers of door transitions"}]
   - ["pins.dht", "i", 0, {title: "DHT GPIO Pin"}]
   - ["pins.north_door_open_contact", "i",  13, { title: "Contact PIN to detect North Door fully open"}]
   - ["pins.north_door_closed_contact", "i",  12, { title: "Contact PIN to detect North Door fully closed"}]

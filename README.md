@@ -5,9 +5,24 @@ ESP8266 LoLin NodeMCU.
 
 <img src="docs/ESP8266-NodeMCU-kit-12-E-pinout-gpio-pin.png">
 
-It's important to select the correct PINs for the H-Bridge motor activation so that you don't get cycling as the device resets, powers on, etc. The motors H-Bridge is are controlled by 2 GPIO pins pulled low. Clockwise or counter-clockwise rotation starts by setting respective pins HI. I don't know what happens if both pins are set to HI, I suppose it could burn out the H-Bridge or the motor so this is something I try to have the code avoid at all times.
+It's important to select the correct PINs for the H-Bridge motor activation so that you don't get cycling as the device resets, powers on, etc. The motor's H-Bridge is controlled by 2 GPIO pins pulled low. Clockwise or counter-clockwise rotation starts by setting respective pins HI. I don't know what happens if both pins are set to HI, I suppose it could burn out the H-Bridge or the motor so this is something I try to have the code avoid at all times.
 
 In this case, I'm using GPIO 4 & 5 to control the north door motor.
+
+## Wiring Legend
+Device              | Silkscreen | Logical Name 
+------------        | ---------- | -------------
+Light Sensor        | A0         | ADC0
+DHT22 Temp/RH       | D3         | GPIO0
+Door Open Contact   | D7         | GPIO13
+Door Closed Contact | D6         | GPIO12
+Door Raise          | D2         | GPIO4
+Door Lower          | D1         | GPIO5
+
+The door is raised or lowered by a string winding around a spool, and the motor turns the spool one direction or the other. Therefore the relationship between clockwise/counterclockwise and raising/lowering will depend on the way the spool is initially wound. Moreover, the spool must retain that winding without reaching the end of the string and winding it up the other way like a yo-yo. Should this happen the sense of the "raise" or "lower" commands would get reversed. It would be good to find a way to prevent this from ever happening.
+
+I suppose the software knows when the door is open or closed and could keep track of whether clockwise or counterclockwise raises or lowers the door. Something perhaps for version 2.0. :-)
+
 
 # Features
  * Door open/close detection and desired state transition

@@ -23,8 +23,10 @@ typedef struct
     uint16_t struct_id;
     uint8_t open_contact_pin;
     uint8_t closed_contact_pin;
-    uint8_t lower_activate_pin;
-    uint8_t raise_activate_pin;
+    uint8_t activate_pin_a;
+    uint8_t activate_pin_b;
+    bool next_activation;
+    DoorState desired_state;
     char name[8];
     /**
      * a value from mgos_uptime() to limit the number of 
@@ -55,5 +57,6 @@ void *Door_north_new(void);
 char *Door_status(void *door);
 bool Door_close(void *door, int flags);
 bool Door_open(void *door, int flags);
+bool Door_activate(void *door);
 DoorError Door_validate(void *door);
 #endif

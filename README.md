@@ -16,12 +16,16 @@ Light Sensor        | A0         | ADC0
 DHT22 Temp/RH       | D3         | GPIO0
 Door Open Contact   | D7         | GPIO13
 Door Closed Contact | D6         | GPIO12
-Door Raise          | D2         | GPIO4
-Door Lower          | D1         | GPIO5
+Motor Clockwise     | D2         | GPIO4
+Motor Counter-Clockwise | D1         | GPIO5
 
 The door is raised or lowered by a string winding around a spool, and the motor turns the spool one direction or the other. Therefore the relationship between clockwise/counterclockwise and raising/lowering will depend on the way the spool is initially wound. Moreover, the spool must retain that winding without reaching the end of the string and winding it up the other way like a yo-yo. Should this happen the sense of the "raise" or "lower" commands would get reversed. It would be good to find a way to prevent this from ever happening.
 
 I suppose the software knows when the door is open or closed and could keep track of whether clockwise or counterclockwise raises or lowers the door. Something perhaps for version 2.0. :-)
+
+I was also considering augmenting the command set to work like my garage door. It has a button you push to _activate_ it. It starts the door moving in the opposite direction of the last time it was activated, or it stops the door if it's already moving. So the commands "raise" or "lower" become an instruction to achieve a _desired state_. The combination of the sensors and the _activate_ command can _implement_ the _desired state_. 
+
+We could add a momentary doorbell button to _activate_ the door, just like my garage door does now.
 
 
 # Features

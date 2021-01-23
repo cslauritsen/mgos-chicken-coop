@@ -38,7 +38,8 @@ static void close_cb(struct mg_rpc_request_info *ri, void *cb_arg,
     mg_rpc_send_errorf(ri, 501, "Invalid door pointer");
     return;
   }
-  bool ans = Door_transition(door, DOOR_CLOSED, 0);
+  door->desired_state = DOOR_CLOSED;
+  bool ans = Door_activate(door);
   mg_rpc_send_responsef(ri, "{result: \"%s\", door: \"%s\", version: \"%s\"}", 
     ans ? "OK" : "Unchanged", 
     door->name, 
@@ -54,7 +55,9 @@ static void open_cb(struct mg_rpc_request_info *ri, void *cb_arg,
     mg_rpc_send_errorf(ri, 501, "Invalid door pointer");
     return;
   }
-  bool ans = Door_transition(door, DOOR_OPEN, 0);
+
+  door->desired_state = DOOR_OPEN;
+  bool ans = Door_activate(door);
   mg_rpc_send_responsef(ri, "{ result: \"%s\", door: \"%s\", version: \"%s\"}", 
     ans ? "OK" : "Unchanged", 
     door->name,

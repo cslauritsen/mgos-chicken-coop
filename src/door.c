@@ -35,26 +35,26 @@ void Door_all_stop(void *adoor) {
 }
 
 static bool _Door_open(Door *door) {
+    Door_all_stop(door);
     if (DOOR_OPEN == Door_get_state(door)) {
         LOG(LL_INFO, ("Door %s already open, doing nothing", door->name));
         return false; 
     }
-    Door_all_stop(door);
-    door->desired_state = DOOR_OPEN;
     LOG(LL_INFO, ("Raising door %s", door->name));
-    Door_activate(door);
+    mgos_gpio_blink(door->open_indicator_pin, 1000, 500);
+    mgos_gpio_write(door->activate_pin_a, DOOR_HBRIDGE_ACTIVE);
     return true;
 }
 
 static bool _Door_close(Door *door) {
+    Door_all_stop(door);
     if (DOOR_CLOSED == Door_get_state(door)) {
         LOG(LL_INFO, ("Door '%s' already closed, doing nothing", door->name));
         return false; 
     }
-    Door_all_stop(door);
-    door->desired_state = DOOR_CLOSED;
     LOG(LL_INFO, ("Lowering door '%s'", door->name));
-    Door_activate(door);
+    mgos_gpio_blink(door->closed_indicator_pin, 1000, 500);
+    mgos_gpio_write(door->activate_pin_b, DOOR_HBRIDGE_ACTIVE);
     return true;
 }
 
@@ -67,49 +67,12 @@ static void _timer_motor_stop(void *adoor) {
     }
 }
 
-bool Door_activate(void *arg) {
-    if (!arg) {
-        return false;
-    }
-    Door *door = (Door*) arg;
-    if (Door_validate(door) != DE_OK) {
-        return false;
-    }
-    bool ret = true;
-    Door_all_stop(door);
-    if (mgos_gpio_read(door->activate_pin_a) || mgos_gpio_read(door->activate_pin_b)) {
-        ret = false;
-    }
-    else {
-        LOG(LL_INFO, ("Activating %s door pin %d", door->name, door->next_activation ? door->activate_pin_a : door->activate_pin_b));
-        timer_id = mgos_set_timer(mgos_sys_config_get_time_door_motor_active_seconds() * 1000, 0, _timer_motor_stop, door);
-        mgos_gpio_write(door->next_activation ? door->activate_pin_a : door->activate_pin_b, true);
-    }
-    door->next_activation = !door->next_activation;
-    return ret;
-}
-
 static void _door_interrupt(int pin, void *arg) {
     Door *door = (Door*) arg;
 
     if (DE_OK != Door_validate(door)) {
         LOG(LL_WARN, ("invalid door pointer"));
         return;
-    }
-
-    // turn off all indicators
-    mgos_gpio_write(mgos_sys_config_get_pins_indicator_red(), false);
-    mgos_gpio_write(mgos_sys_config_get_pins_indicator_green(), false);
-
-    if (mgos_gpio_read(pin) == false) {
-        // pull up resistors, so active state is low/false
-        // turn on the relevant indicator
-        if (pin == door->closed_contact_pin) {
-            mgos_gpio_write(mgos_sys_config_get_pins_indicator_red(), true); 
-        }
-        else if (pin == door->open_contact_pin) {
-            mgos_gpio_write(mgos_sys_config_get_pins_indicator_green(), true); 
-        }
     }
 
     if (mgos_uptime() * 1000 - door->debounce_millis > mgos_sys_config_get_time_debounce_millis()) {
@@ -125,21 +88,8 @@ static void _door_interrupt(int pin, void *arg) {
         return;
     }
     LOG(LL_INFO, ("pin %d interrupt door %s", pin, door->name));
-    switch(door->desired_state) {
-        case DOOR_CLOSED:
-        if (pin == door->closed_contact_pin) {
-            Door_all_stop(door);
-        }
-        break;
-        case DOOR_OPEN:
-        if (pin == door->open_contact_pin) {
-            Door_all_stop(door);
-        }
-        break;
-        default:
-            Door_all_stop(door);
-        break;
-    }
+    Door_all_stop(door);
+    Door_indicate(door);
 }
 
 void Door_init(Door *door) {
@@ -161,7 +111,13 @@ void Door_init(Door *door) {
     Door_all_stop(door);
 }
 
-Door * Door_new(int open_contact, int closed_contact, int act_pin_a, int act_pin_b, const char *name) {
+Door * Door_new(int open_contact, 
+        int closed_contact, 
+        int act_pin_a, 
+        int act_pin_b, 
+        const char *name,
+        int open_indicator_pin,
+        int closed_indicator_pin) {
     Door *door = calloc(1, sizeof(Door));
     door->struct_id = DOOR_STRUCT_ID;
     door->open_contact_pin = open_contact;
@@ -171,6 +127,9 @@ Door * Door_new(int open_contact, int closed_contact, int act_pin_a, int act_pin
     for (int i=0; name != NULL && *name && i < sizeof(door->name)-1; i++) {
        door->name[i] = *name++;
     }
+
+    door->open_indicator_pin = open_indicator_pin;
+    door->closed_indicator_pin = closed_indicator_pin;
 
     Door_init(door);
     return door;
@@ -182,7 +141,9 @@ void *Door_north_new(void) {
       mgos_sys_config_get_pins_north_door_closed_contact(), 
       mgos_sys_config_get_pins_north_door_lower(), 
       mgos_sys_config_get_pins_north_door_raise(), 
-      mgos_sys_config_get_doors_north_name()
+      mgos_sys_config_get_doors_north_name(),
+      mgos_sys_config_get_pins_indicator_red(),
+      mgos_sys_config_get_pins_indicator_green() 
     );
     return (void*) north_door;
 }
@@ -209,6 +170,29 @@ bool Door_close(void *adoor, int flags) {
 bool Door_open(void *adoor, int flags) {
     Door *door = (Door *) adoor;
     return _Door_open(door);
+}
+
+void Door_indicate(void *adoor) {
+    Door *door = (Door*) adoor;
+    mgos_gpio_write(door->closed_indicator_pin, false);
+    mgos_gpio_write(door->open_indicator_pin, false);
+    mgos_gpio_blink(door->closed_indicator_pin, 0, 0);
+    mgos_gpio_blink(door->open_indicator_pin, 0, 0);
+    switch(Door_get_state(door)) {
+        case DOOR_OPEN:
+        mgos_gpio_write(door->open_indicator_pin, true);
+        break;
+        case DOOR_CLOSED:
+        mgos_gpio_write(door->closed_indicator_pin, true);
+        break;
+        case DOOR_STUCK:
+        mgos_gpio_blink(door->closed_indicator_pin, 1000, 1000);
+        break;
+        default:
+        mgos_gpio_blink(door->closed_indicator_pin, 500, 500);
+        mgos_gpio_blink(door->open_indicator_pin, 200, 200);
+        break;
+    }
 }
 
 DoorError Door_validate(void * arg) {

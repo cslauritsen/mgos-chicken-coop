@@ -38,8 +38,7 @@ static void close_cb(struct mg_rpc_request_info *ri, void *cb_arg,
     mg_rpc_send_errorf(ri, 501, "Invalid door pointer");
     return;
   }
-  door->desired_state = DOOR_CLOSED;
-  bool ans = Door_activate(door);
+  bool ans = Door_close(door, 0);
   mg_rpc_send_responsef(ri, "{result: \"%s\", door: \"%s\", version: \"%s\"}", 
     ans ? "OK" : "Unchanged", 
     door->name, 
@@ -56,39 +55,11 @@ static void open_cb(struct mg_rpc_request_info *ri, void *cb_arg,
     return;
   }
 
-  door->desired_state = DOOR_OPEN;
-  bool ans = Door_activate(door);
+  bool ans = Door_open(door, 0);
   mg_rpc_send_responsef(ri, "{ result: \"%s\", door: \"%s\", version: \"%s\"}", 
     ans ? "OK" : "Unchanged", 
     door->name,
     build_version);
-  (void) fi;
-}
-
-static void activate_cb(struct mg_rpc_request_info *ri, void *cb_arg,
-                   struct mg_rpc_frame_info *fi, struct mg_str args) {
-  extern char* build_version;
-  Door *door = (Door*) cb_arg;
-  if (DE_OK != Door_validate(door)) {
-    mg_rpc_send_errorf(ri, 501, "Invalid door pointer");
-    return;
-  }
-
-  if (mgos_gpio_read(door->activate_pin_a) || mgos_gpio_read(door->activate_pin_b)) {
-    Door_all_stop(door);
-    mg_rpc_send_responsef(ri, "{ result: \"%s\", door: \"%s\", version: \"%s\"}", 
-      "Stopped",
-      door->name,
-      build_version);
-  }
-  else {
-    door->desired_state = Door_get_state(door) == DOOR_OPEN ? DOOR_CLOSED : DOOR_OPEN;
-    bool ans = Door_activate(door);
-    mg_rpc_send_responsef(ri, "{ result: \"%s\", door: \"%s\", version: \"%s\"}", 
-      ans ? "OK" : "Unchanged", 
-      door->name,
-      build_version);
-  }
   (void) fi;
 }
 
@@ -132,11 +103,14 @@ enum mgos_app_init_result mgos_app_init(void) {
       mgos_sys_config_get_pins_north_door_closed_contact(), 
       mgos_sys_config_get_pins_north_door_lower(), 
       mgos_sys_config_get_pins_north_door_raise(), 
-      "NORTH");
+      "NORTH",
+      mgos_sys_config_get_pins_indicator_green(),
+      mgos_sys_config_get_pins_indicator_red());
   mg_rpc_add_handler(mgos_rpc_get_global(), "cNorthDoor.Open", NULL, open_cb, north_door);
   mg_rpc_add_handler(mgos_rpc_get_global(), "cNorthDoor.Close", NULL, close_cb, north_door);
   mg_rpc_add_handler(mgos_rpc_get_global(), "cNorthDoor.Status", NULL, status_cb, north_door);
-  mg_rpc_add_handler(mgos_rpc_get_global(), "cNorthDoor.Activate", NULL, activate_cb, north_door);
   mg_rpc_add_handler(mgos_rpc_get_global(), "cNorthDoor.ResetLightTrigger", NULL, reset_cb, north_door);
+
+  Door_indicate(north_door);
   return MGOS_APP_INIT_SUCCESS;
 }

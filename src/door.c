@@ -4,7 +4,10 @@
 #include <mgos_app.h>
 #include <mgos_system.h>
 #include <mgos_time.h>
+#include <mgos_mqtt.h>
 #include "door.h"
+
+static mgos_timer_id timer_id = MGOS_INVALID_TIMER_ID;
 
 DoorState Door_get_state(Door *door) {
     // false->low voltage means switch closed & state active, since these 
@@ -21,7 +24,11 @@ DoorState Door_get_state(Door *door) {
     return isclosed ? DOOR_CLOSED : DOOR_OPEN;
 }
 
-void Door_all_stop(Door *door) {
+void Door_all_stop(void *adoor) {
+    Door *door = (Door*) adoor;
+    if (DE_OK != Door_validate(door)) {
+        LOG(LL_ERROR, ("Invalid door pointer"));
+    }
     mgos_gpio_write(door->activate_pin_a, DOOR_HBRIDGE_INACTIVE);
     mgos_gpio_write(door->activate_pin_b, DOOR_HBRIDGE_INACTIVE); 
     LOG(LL_INFO, ("Door '%s' all_stop issued", door->name));
@@ -51,6 +58,15 @@ static bool _Door_close(Door *door) {
     return true;
 }
 
+static void _timer_motor_stop(void *adoor) {
+    Door *door = (Door*) adoor;
+    Door_all_stop(door);
+    if (timer_id != MGOS_INVALID_TIMER_ID) {
+        mgos_clear_timer(timer_id);
+        timer_id = MGOS_INVALID_TIMER_ID;
+    }
+}
+
 bool Door_activate(void *arg) {
     if (!arg) {
         return false;
@@ -66,6 +82,7 @@ bool Door_activate(void *arg) {
     }
     else {
         LOG(LL_INFO, ("Activating %s door pin %d", door->name, door->next_activation ? door->activate_pin_a : door->activate_pin_b));
+        timer_id = mgos_set_timer(mgos_sys_config_get_time_door_motor_active_seconds() * 1000, 0, _timer_motor_stop, door);
         mgos_gpio_write(door->next_activation ? door->activate_pin_a : door->activate_pin_b, true);
     }
     door->next_activation = !door->next_activation;
@@ -74,10 +91,40 @@ bool Door_activate(void *arg) {
 
 static void _door_interrupt(int pin, void *arg) {
     Door *door = (Door*) arg;
-    if (!Door_validate(door)) {
+
+    if (DE_OK != Door_validate(door)) {
         LOG(LL_WARN, ("invalid door pointer"));
         return;
     }
+
+    // turn off all indicators
+    mgos_gpio_write(mgos_sys_config_get_pins_indicator_red(), false);
+    mgos_gpio_write(mgos_sys_config_get_pins_indicator_green(), false);
+
+    if (mgos_gpio_read(pin) == false) {
+        // pull up resistors, so active state is low/false
+        // turn on the relevant indicator
+        if (pin == door->closed_contact_pin) {
+            mgos_gpio_write(mgos_sys_config_get_pins_indicator_red(), true); 
+        }
+        else if (pin == door->open_contact_pin) {
+            mgos_gpio_write(mgos_sys_config_get_pins_indicator_green(), true); 
+        }
+    }
+
+    if (mgos_uptime() * 1000 - door->debounce_millis > mgos_sys_config_get_time_debounce_millis()) {
+        char *msg = Door_status(door);
+        mgos_mqtt_pub("homie/coop-7e474a/north-door/position", msg, strlen(msg), 1, true);
+        door->debounce_millis = mgos_uptime() * 1000;
+    }
+    else {
+        LOG(LL_WARN, ("interrupt debounced %d", mgos_sys_config_get_time_debounce_millis()));
+    }
+    if (mgos_gpio_read(pin)) {
+        LOG(LL_INFO, ("Ignoring door interrupt on pin %d HI state", pin));
+        return;
+    }
+    LOG(LL_INFO, ("pin %d interrupt door %s", pin, door->name));
     switch(door->desired_state) {
         case DOOR_CLOSED:
         if (pin == door->closed_contact_pin) {
@@ -96,21 +143,25 @@ static void _door_interrupt(int pin, void *arg) {
 }
 
 void Door_init(Door *door) {
-    if (!Door_validate(door)) {
+    if (DE_OK != Door_validate(door)) {
         LOG(LL_ERROR, ("Cannot initiate invalid door!"));
     }
     mgos_gpio_setup_input(door->open_contact_pin, MGOS_GPIO_PULL_UP);
     mgos_gpio_setup_input(door->closed_contact_pin, MGOS_GPIO_PULL_UP);
     mgos_gpio_setup_output(door->activate_pin_a, false);
     mgos_gpio_setup_output(door->activate_pin_b, false);
+    mgos_gpio_setup_output(mgos_sys_config_get_pins_indicator_red(), false);
+    mgos_gpio_setup_output(mgos_sys_config_get_pins_indicator_green(), false);
     mgos_gpio_set_int_handler(door->open_contact_pin, MGOS_GPIO_INT_EDGE_NEG, _door_interrupt, door);
+    mgos_gpio_enable_int(door->open_contact_pin);
     LOG(LL_INFO, ("Setup OPEN interrupt on pin %d for door %s", door->open_contact_pin, door->name));
     mgos_gpio_set_int_handler(door->closed_contact_pin, MGOS_GPIO_INT_EDGE_NEG, _door_interrupt, door);
+    mgos_gpio_enable_int(door->closed_contact_pin);
     LOG(LL_INFO, ("Setup CLOSE interrupt on pin %d for door %s", door->closed_contact_pin, door->name));
     Door_all_stop(door);
 }
 
-Door * Door_new(int open_contact, int closed_contact, int act_pin_a, int act_pin_b, char *name) {
+Door * Door_new(int open_contact, int closed_contact, int act_pin_a, int act_pin_b, const char *name) {
     Door *door = calloc(1, sizeof(Door));
     door->struct_id = DOOR_STRUCT_ID;
     door->open_contact_pin = open_contact;
@@ -131,7 +182,8 @@ void *Door_north_new(void) {
       mgos_sys_config_get_pins_north_door_closed_contact(), 
       mgos_sys_config_get_pins_north_door_lower(), 
       mgos_sys_config_get_pins_north_door_raise(), 
-      "NORTH");
+      mgos_sys_config_get_doors_north_name()
+    );
     return (void*) north_door;
 }
 

@@ -30,12 +30,15 @@ config_schema:
   - ["garage.int_value", "i", 123, {title: "Some integer value"}]
   - ["time.mqttPubInterval", "i", 60, {title: "How many seconds between MQTT publications"}]
   - ["time.door_motor_active_seconds", "i",  10, { title: "Maximum seconds door motor should ever run"}]
+  - ["time.debounce_millis", "i",  500, { title: "Time interval during which repeated interrupts may be ignored"}]
   - ["time.light_trigger_min_hours", "i",  5, { title: "Minimum hours between light-based triggers of door transitions"}]
   - ["pins.dht", "i", 0, {title: "DHT GPIO Pin"}]
   - ["pins.north_door_open_contact", "i",  13, { title: "Contact PIN to detect North Door fully open"}]
   - ["pins.north_door_closed_contact", "i",  12, { title: "Contact PIN to detect North Door fully closed"}]
   - ["pins.north_door_raise", "i",  4, { title: "Control PIN to raise north door, driven LOW on startup"}]
   - ["pins.north_door_lower", "i",  5, { title: "Control PIN to lower north door, driven LOW on startup"}]
+  - ["pins.indicator_red", "i",  15, { title: "Control PIN to turn on red indicator"}]
+  - ["pins.indicator_green", "i",  14, { title: "Control PIN to turn on green indicator"}]
   - ["pins.lightsensor", "i",  0, { title: "ADC PIN to read light level"}]
   - ["luminosity.openThreshold", "i",  300, { title: "Values below which the door will auto-open"}]
   - ["luminosity.closeThreshold", "i",  900, { title: "Values above which the door will auto-close"}]
@@ -48,6 +51,8 @@ config_schema:
   - ["homie.pubinterval", "i",  200, { title: "Millis to wait before sending another homie cfg msg"}]
   - ["rpc.mqtt.enable", "b",  true, { title: "MQTT RPC enabled"} ]
   - ["debug.udp_log_addr", "s",  "192.168.1.5:31337", { title: "UDP log target"} ]
+  - ["doors.north.name", "s",  "north-door", { title: "Name of North door"} ]
+
 
 # These settings get compiled into the C structure, and can be accessed
 # from the C code this way:

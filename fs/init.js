@@ -25,6 +25,7 @@ let Door_north_new = ffi('void * Door_north_new(void)');
 let Door_status = ffi('char * Door_status(void *)');
 let Door_close = ffi('bool Door_close(void *, int)');
 let Door_open = ffi('bool Door_open(void *, int)');
+let Door_all_stop = ffi('void Door_all_stop(void *)');
 
 let open_thresh = Cfg.get('luminosity.openThreshold');
 let close_thresh = Cfg.get('luminosity.closeThreshold');
@@ -54,7 +55,7 @@ load('api_mqtt.js');
 
 let nm = Cfg.get('project.name');
 let dht_pin = Cfg.get('pins.dht');
-Log.print(Log.INFO, 'dht_pin:', dht_pin);
+Log.print(Log.INFO, 'dht_pin:'+ JSON.stringify(dht_pin));
 let pubInt = Cfg.get('time.mqttPubInterval');
 let dht = DHT.create(dht_pin, DHT.DHT22);
 let counter = 0;
@@ -122,19 +123,20 @@ let homie_setup_msgs = [
 
 // subscribe to homie set commands
 MQTT.sub(bstpc + '+/+/set', function(conn, topic, msg) {
-  Log.print(Log.INFO, 'Topic:', topic, 'message:', msg);
-  if (msg === '1' || msg === 'true') {
-    if (topic.indexOf('north-door/position') !== -1) {
-       if (msg === "closed") {
-           Door_close(north_door, 0);
-       }
-       else if (msg === "open") {
-           Door_open(north_door, 0);
-       }
-      return;
+  Log.print(Log.INFO, 'Topic:' + topic + ' message: ' + msg);
+  if (topic.indexOf('north-door/position') !== -1) {
+    if (msg === "closed") {
+        Door_close(north_door, 0);
     }
+    else if (msg === "open") {
+        Door_open(north_door, 0);
+    }
+    else {
+      Door_all_stop(north_door);
+    }
+    return;
   }
-  Log.print(Log.INFO, "Message ", msg, ' was ignored');
+  Log.print(Log.INFO, "Message "+ msg+ ' was ignored');
 }, null);
 Log.print(Log.INFO, 'subscribed');
 
@@ -154,13 +156,13 @@ let homie_timer = Timer.set(Cfg.get("homie.pubinterval"), true, function() {
   let br = mgos_mqtt_num_unsent_bytes();
   let maxbr = Cfg.get("mqtt.max_unsent");
   if (br > maxbr) {
-    Log.print(Log.INFO, 'home setup: waiting for MQTT queue to clear: ', br);
+    Log.print(Log.INFO, 'homie setup: waiting for MQTT queue to clear: '+ JSON.stringify(br));
   }
   if (homie_msg_ix >= 0 && homie_msg_ix < homie_setup_msgs.length) {
     let msg = homie_setup_msgs[homie_msg_ix];
     let ret = MQTT.pub(msg.t, msg.m, 2, msg.retain);
     if (ret === 0) {
-      Log.print(Log.INFO, "homie pub failed: ", ret);
+      Log.print(Log.INFO, "homie pub failed: " + JSON.stringify(ret));
     }
     else {
       // if publication was successful, on the next go around, send the next message
@@ -173,7 +175,7 @@ let homie_timer = Timer.set(Cfg.get("homie.pubinterval"), true, function() {
 let apins = [Cfg.get('pins.lightsensor')];
 for (let i=0; i < apins.length; i++) {
     ADC.enable(apins[i]);
-    Log.print(Log.INFO, "Enabled ADC on ", apins[i]);
+    Log.print(Log.INFO, "Enabled ADC on "+ JSON.stringify(apins[i]));
 }
 
 Timer.set(1000, true, function() {
@@ -193,22 +195,29 @@ Timer.set(1000, true, function() {
     }
   };
 
-  Log.print(Log.DEBUG, JSON.stringify(sdata));
+  if (Cfg.get('debug.level') >= Log.DEBUG)  Log.print(Log.DEBUG, JSON.stringify(sdata));
+  
 
-  if (sdata.light.luminosity >= 0 && sdata.light.luminosity <= 1024) {
-    Log.print(Log.INFO, "Luminosity check within range " + JSON.stringify(open_thresh) +  ".." + JSON.stringify(close_thresh) +  ": " + JSON.stringify(sdata.light.luminosity));
-    if (sdata.light.luminosity <= open_thresh && "closed" === Door_status(north_door)) {
-      Log.print(Log.INFO, 'Opening doors lum val ' + JSON.stringify(sdata.light.luminosity));
-      Door_open(north_door, 1);
+  if ("closed" === Door_status(north_door) || "open" === Door_status(north_door)) {
+    if (sdata.light.luminosity >= 0 && sdata.light.luminosity <= 1024) {
+      if (Log.is)
+      if (Cfg.get('debug.level') >= Log.DEBUG) Log.print(Log.DEBUG, "Luminosity " + JSON.stringify(sdata.light.luminosity) + ", range " + JSON.stringify(open_thresh) +  ".." + JSON.stringify(close_thresh) +  " door status: " + Door_status(north_door));
+      if (sdata.light.luminosity <= open_thresh && "closed" === Door_status(north_door)) {
+        Log.print(Log.INFO, 'Opening doors lum val ' + JSON.stringify(sdata.light.luminosity));
+        Door_open(north_door, 1);
+      }
+      if (sdata.light.luminosity >= close_thresh && "open" === Door_status(north_door)) {
+        Log.print(Log.INFO, 'Closing doors lum val ' + JSON.stringify(sdata.light.luminosity));
+        Door_close(north_door, 1);
+      }
     }
-    if (sdata.light.luminosity >= close_thresh && "open" === Door_status(north_door)) {
-      Log.print(Log.INFO, 'Closing doors lum val ' + JSON.stringify(sdata.light.luminosity));
-      Door_close(north_door, 1);
+    else {
+      Log.print(Log.ERROR, "Luminosity reading not within acceptable range.");
     }
-  }
-  else {
-    Log.print(Log.ERROR, "Luminosity reading not within acceptable range.");
-  }
+}
+else {
+  if (Cfg.get('debug.level') >= Log.DEBUG) Log.print(Log.DEBUG, "Door stuck, skipping light-based door automation");
+}
 
   if (counter++ % pubInt === 0 && homie_msg_ix >= homie_setup_msgs.length-1) {
     let qos = 1;

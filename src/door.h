@@ -27,12 +27,13 @@ typedef struct
     uint8_t activate_pin_b;
     bool next_activation;
     DoorState desired_state;
-    char name[8];
+    char name[16];
     /**
      * a value from mgos_uptime() to limit the number of 
      * attempted light-sensor triggered transitions
      */
     double last_light_trigger;
+    double debounce_millis;
 } Door;
 
 typedef enum
@@ -48,10 +49,10 @@ typedef enum
 #define DOOR_HBRIDGE_INACTIVE 0
 
 DoorState Door_get_state(Door *door);
-void Door_all_stop(Door *door);
+void Door_all_stop(void *door);
 bool Door_transition(Door *door, DoorState desiredState, int flags);
 void Door_init(Door *door);
-Door *Door_new(int open_contact, int closed_contact, int lower_act_pin, int raise_act_pin, char *name);
+Door *Door_new(int open_contact, int closed_contact, int lower_act_pin, int raise_act_pin, const char *name);
 // FFI wrappers
 void *Door_north_new(void);
 char *Door_status(void *door);

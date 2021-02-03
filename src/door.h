@@ -9,6 +9,7 @@
 #define DF_ISSET(flags, flag) (~(flag) & (flags)) == (flag)
 #define IS_PIN(x) ((x) >= 0 && (x) <= 50)
 #define DF_LIGHT_TRIG 0x1
+#define DF_FORCE 0x2
 
 typedef enum
 {

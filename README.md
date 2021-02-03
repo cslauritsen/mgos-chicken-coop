@@ -19,14 +19,19 @@ Door Closed Contact | D6         | GPIO12
 Motor Clockwise     | D2         | GPIO4
 Motor Counter-Clockwise | D1         | GPIO5
 
-The door is raised or lowered by a string winding around a spool, and the motor turns the spool one direction or the other. Therefore the relationship between clockwise/counterclockwise and raising/lowering will depend on the way the spool is initially wound. Moreover, the spool must retain that winding without reaching the end of the string and winding it up the other way like a yo-yo. Should this happen the sense of the "raise" or "lower" commands would get reversed. It would be good to find a way to prevent this from ever happening.
+## Connector Legend
+Use the following layout with an RJ45 connector + Cat5 cable for the peripherals.
 
-I suppose the software knows when the door is open or closed and could keep track of whether clockwise or counterclockwise raises or lowers the door. Something perhaps for version 2.0. :-)
-
-I was also considering augmenting the command set to work like my garage door. It has a button you push to _activate_ it. It starts the door moving in the opposite direction of the last time it was activated, or it stops the door if it's already moving. So the commands "raise" or "lower" become an instruction to achieve a _desired state_. The combination of the sensors and the _activate_ command can _implement_ the _desired state_. 
-
-We could add a momentary doorbell button to _activate_ the door, just like my garage door does now.
-
+Conductor Color         | Function
+----------------------- | --------------------------
+Blue                    | Light Sensor Lead A
+Blue/White              | Light Sensor Lead B
+Brown                   | Closed Contact B
+Brown/White             | GND
+Orange                  | +5VDC
+Orange/White            | Red LED -
+Green                   | Open Contact A 
+Green/White             | Green LED -
 
 # Features
  * Door open/close detection and desired state transition
@@ -35,11 +40,6 @@ We could add a momentary doorbell button to _activate_ the door, just like my ga
  * MQTT publishing
  * HTTP/MQTT RPC Control
  * OTA Firmware Updating
-
- # Desired State 
- The coop has one automated door. It has reed sensors to detect 2 states, fully open and fully closed. Additionally it includes RPC mechanisms to instruct the device to transition the door from one state to a desired state. It uses an H-Bridge to run the motor in one direction or the other and monitors the door so that the motor will be stopped when its desired state is reached, or a maximum amount of time has elapsed.
-
- The maximum time functions as a backstop to prevent the motor from burning out if it gets stuck, for instance.
 
  ## HTTP
  Issue an HTTP get like so, no paylaod is required. 

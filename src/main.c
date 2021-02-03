@@ -14,6 +14,7 @@
 #include <mgos_timers.h>
 #include <mgos_time.h>
 #include "door.h"
+#include "util.h"
 
 // declared in build_info.c
 extern char* build_version;
@@ -38,7 +39,7 @@ static void close_cb(struct mg_rpc_request_info *ri, void *cb_arg,
     mg_rpc_send_errorf(ri, 501, "Invalid door pointer");
     return;
   }
-  bool ans = Door_close(door, 0);
+  bool ans = Door_close(door, DF_FORCE);
   mg_rpc_send_responsef(ri, "{result: \"%s\", door: \"%s\", version: \"%s\"}", 
     ans ? "OK" : "Unchanged", 
     door->name, 
@@ -55,11 +56,25 @@ static void open_cb(struct mg_rpc_request_info *ri, void *cb_arg,
     return;
   }
 
-  bool ans = Door_open(door, 0);
+  bool ans = Door_open(door, DF_FORCE);
   mg_rpc_send_responsef(ri, "{ result: \"%s\", door: \"%s\", version: \"%s\"}", 
     ans ? "OK" : "Unchanged", 
     door->name,
     build_version);
+  (void) fi;
+}
+
+static void stop_cb(struct mg_rpc_request_info *ri, void *cb_arg,
+                   struct mg_rpc_frame_info *fi, struct mg_str args) {
+  extern char* build_version;
+  Door *door = (Door*) cb_arg;
+  if (DE_OK != Door_validate(door)) {
+    mg_rpc_send_errorf(ri, 501, "Invalid door pointer");
+    return;
+  }
+
+  Door_all_stop(door);
+  Door_indicate(door);
   (void) fi;
 }
 
@@ -89,11 +104,24 @@ static void status_cb(struct mg_rpc_request_info *ri, void *cb_arg,
     return;
   }
   extern char* build_version;
+  Door_indicate(door);
   mg_rpc_send_responsef(ri, "{ door: \"%s\", status: \"%s\", version: \"%s\" }", 
     door->name, 
     Door_status(door), 
     build_version);
   (void) fi;
+}
+
+static void ip_cb(struct mg_rpc_request_info *ri, void *cb_arg,
+                   struct mg_rpc_frame_info *fi, struct mg_str args) {
+  LOG(LL_INFO, ("in ip_cb"));
+  mg_rpc_send_responsef(ri, "{ ip: \"%s\" }", Util_get_ip());
+}
+
+static void mac_cb(struct mg_rpc_request_info *ri, void *cb_arg,
+                   struct mg_rpc_frame_info *fi, struct mg_str args) {
+  LOG(LL_INFO, ("in mac_cb"));
+  mg_rpc_send_responsef(ri, "{ mac: \"%s\" }", Util_get_mac());
 }
 
 // Somewhere in init function, register the handler:
@@ -104,12 +132,15 @@ enum mgos_app_init_result mgos_app_init(void) {
       mgos_sys_config_get_pins_north_door_lower(), 
       mgos_sys_config_get_pins_north_door_raise(), 
       "NORTH",
-      mgos_sys_config_get_pins_indicator_green(),
-      mgos_sys_config_get_pins_indicator_red());
+      mgos_sys_config_get_pins_indicator_red(),
+      mgos_sys_config_get_pins_indicator_green());
   mg_rpc_add_handler(mgos_rpc_get_global(), "cNorthDoor.Open", NULL, open_cb, north_door);
   mg_rpc_add_handler(mgos_rpc_get_global(), "cNorthDoor.Close", NULL, close_cb, north_door);
   mg_rpc_add_handler(mgos_rpc_get_global(), "cNorthDoor.Status", NULL, status_cb, north_door);
+  mg_rpc_add_handler(mgos_rpc_get_global(), "cNorthDoor.Stop", NULL, stop_cb, north_door);
   mg_rpc_add_handler(mgos_rpc_get_global(), "cNorthDoor.ResetLightTrigger", NULL, reset_cb, north_door);
+  mg_rpc_add_handler(mgos_rpc_get_global(), "csys.ip", NULL, ip_cb, NULL);
+  mg_rpc_add_handler(mgos_rpc_get_global(), "csys.mac", NULL, mac_cb, NULL);
 
   Door_indicate(north_door);
   return MGOS_APP_INIT_SUCCESS;

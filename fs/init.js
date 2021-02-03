@@ -198,25 +198,30 @@ Timer.set(1000, true, function() {
   if (Cfg.get('debug.level') >= Log.DEBUG)  Log.print(Log.DEBUG, JSON.stringify(sdata));
   
 
-  if ("closed" === Door_status(north_door) || "open" === Door_status(north_door)) {
-    if (sdata.light.luminosity >= 0 && sdata.light.luminosity <= 1024) {
-      if (Log.is)
-      if (Cfg.get('debug.level') >= Log.DEBUG) Log.print(Log.DEBUG, "Luminosity " + JSON.stringify(sdata.light.luminosity) + ", range " + JSON.stringify(open_thresh) +  ".." + JSON.stringify(close_thresh) +  " door status: " + Door_status(north_door));
-      if (sdata.light.luminosity <= open_thresh && "closed" === Door_status(north_door)) {
-        Log.print(Log.INFO, 'Opening doors lum val ' + JSON.stringify(sdata.light.luminosity));
-        Door_open(north_door, 1);
+if (Cfg.get('luminosity.enabled')) {
+    if ("closed" === Door_status(north_door) || "open" === Door_status(north_door)) {
+      if (sdata.light.luminosity >= 0 && sdata.light.luminosity <= 1024) {
+        if (Log.is)
+        if (Cfg.get('debug.level') >= Log.DEBUG) Log.print(Log.DEBUG, "Luminosity " + JSON.stringify(sdata.light.luminosity) + ", range " + JSON.stringify(open_thresh) +  ".." + JSON.stringify(close_thresh) +  " door status: " + Door_status(north_door));
+        if (sdata.light.luminosity <= open_thresh && "closed" === Door_status(north_door)) {
+          Log.print(Log.INFO, 'Opening doors lum val ' + JSON.stringify(sdata.light.luminosity));
+          Door_open(north_door, 1);
+        }
+        if (sdata.light.luminosity >= close_thresh && "open" === Door_status(north_door)) {
+          Log.print(Log.INFO, 'Closing doors lum val ' + JSON.stringify(sdata.light.luminosity));
+          Door_close(north_door, 1);
+        }
       }
-      if (sdata.light.luminosity >= close_thresh && "open" === Door_status(north_door)) {
-        Log.print(Log.INFO, 'Closing doors lum val ' + JSON.stringify(sdata.light.luminosity));
-        Door_close(north_door, 1);
+      else {
+        Log.print(Log.ERROR, "Luminosity reading not within acceptable range.");
       }
-    }
-    else {
-      Log.print(Log.ERROR, "Luminosity reading not within acceptable range.");
-    }
+  }
+  else {
+    if (Cfg.get('debug.level') >= Log.DEBUG) Log.print(Log.DEBUG, "Door stuck, skipping light-based door automation");
+  }
 }
 else {
-  if (Cfg.get('debug.level') >= Log.DEBUG) Log.print(Log.DEBUG, "Door stuck, skipping light-based door automation");
+  Log.print(Log.DEBUG, 'Luminosity checks disabled');
 }
 
   if (counter++ % pubInt === 0 && homie_msg_ix >= homie_setup_msgs.length-1) {
@@ -226,7 +231,7 @@ else {
     MQTT.pub(bstpc + 'dht22/rh', JSON.stringify(sdata.dht22.rh), qos, rtn);
     MQTT.pub(bstpc + 'dht22/tempc', JSON.stringify(sdata.dht22.celsius), qos, rtn);
     MQTT.pub(bstpc + 'dht22/tempf', JSON.stringify(sdata.dht22.fahrenheit), qos, rtn);
-    MQTT.pub(bstpc + 'north-door/position', JSON.stringify(sdata.doors.north.position), qos, rtn);
+    MQTT.pub(bstpc + 'north-door/position', sdata.doors.north.position, qos, rtn);
     MQTT.pub(bstpc + 'light-sensor/luminosity', JSON.stringify(sdata.light.luminosity), qos, rtn);
   }
 }, null);

@@ -35,13 +35,14 @@ config_schema:
   - ["pins.dht", "i", 0, {title: "DHT GPIO Pin"}]
   - ["pins.north_door_open_contact", "i",  13, { title: "Contact PIN to detect North Door fully open"}]
   - ["pins.north_door_closed_contact", "i",  12, { title: "Contact PIN to detect North Door fully closed"}]
-  - ["pins.north_door_raise", "i",  4, { title: "Control PIN to raise north door, driven LOW on startup"}]
-  - ["pins.north_door_lower", "i",  5, { title: "Control PIN to lower north door, driven LOW on startup"}]
+  - ["pins.north_door_raise", "i",  5, { title: "Control PIN to raise north door, driven LOW on startup"}]
+  - ["pins.north_door_lower", "i",  4, { title: "Control PIN to lower north door, driven LOW on startup"}]
   - ["pins.indicator_red", "i",  15, { title: "Control PIN to turn on red indicator"}]
   - ["pins.indicator_green", "i",  14, { title: "Control PIN to turn on green indicator"}]
   - ["pins.lightsensor", "i",  0, { title: "ADC PIN to read light level"}]
   - ["luminosity.openThreshold", "i",  300, { title: "Values below which the door will auto-open"}]
   - ["luminosity.closeThreshold", "i",  900, { title: "Values above which the door will auto-close"}]
+  - ["luminosity.enabled", "b",  false, { title: "Whether to automatically respond to light level"}]
   - ["mqtt.server", "s",  "192.168.1.5", { title: "MQTT Server"} ]
   - ["mqtt.will_topic", "s",  "homie/${device.id}/$state", { title: "MQTT LWT message topic prescribed by Homie 4.0 spec"} ]
   - ["mqtt.will_message", "s",  "lost", { title: "MQTT LWT message prescribed by Homie 4.0 spec"} ]
@@ -79,6 +80,8 @@ libs:
   - origin: https://github.com/mongoose-os-libs/rpc-service-ota
   - origin: https://github.com/mongoose-os-libs/rpc-uart
   - origin: https://github.com/mongoose-os-libs/rpc-mqtt
+  - origin: https://github.com/mongoose-os-libs/rpc-loopback
+  - origin: https://github.com/mongoose-os-libs/rpc-common
   - origin: https://github.com/mongoose-os-libs/wifi
   - origin: https://github.com/mongoose-os-libs/dht
   - origin: https://github.com/mongoose-os-libs/mjs

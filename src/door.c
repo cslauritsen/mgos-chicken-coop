@@ -7,8 +7,6 @@
 #include <mgos_mqtt.h>
 #include "door.h"
 
-static mgos_timer_id timer_id = MGOS_INVALID_TIMER_ID;
-
 DoorState Door_get_state(Door *door) {
     // false->low voltage means switch closed & state active, since these 
     // are ground-connected reed switches with pullup resistors
@@ -34,37 +32,38 @@ void Door_all_stop(void *adoor) {
     LOG(LL_INFO, ("Door '%s' all_stop issued", door->name));
 }
 
-static bool _Door_open(Door *door) {
+static bool _Door_open(Door *door, int flags) {
     Door_all_stop(door);
-    if (DOOR_OPEN == Door_get_state(door)) {
-        LOG(LL_INFO, ("Door %s already open, doing nothing", door->name));
-        return false; 
+    if (DF_ISSET(flags, DF_FORCE)) {
+        LOG(LL_WARN, ("Door %s force-opened", door->name));
+    }
+    else {
+        if (DOOR_OPEN == Door_get_state(door)) {
+            LOG(LL_INFO, ("Door %s already open, doing nothing", door->name));
+            return false; 
+        }
     }
     LOG(LL_INFO, ("Raising door %s", door->name));
     mgos_gpio_blink(door->open_indicator_pin, 1000, 500);
-    mgos_gpio_write(door->activate_pin_a, DOOR_HBRIDGE_ACTIVE);
+    mgos_gpio_write(door->activate_pin_a, DOOR_HBRIDGE_ACTIVE); 
     return true;
 }
 
-static bool _Door_close(Door *door) {
+static bool _Door_close(Door *door, int flags) {
     Door_all_stop(door);
-    if (DOOR_CLOSED == Door_get_state(door)) {
-        LOG(LL_INFO, ("Door '%s' already closed, doing nothing", door->name));
-        return false; 
+    if (DF_ISSET(flags, DF_FORCE)) {
+        LOG(LL_WARN, ("Door %s force-closed", door->name));
+    }
+    else {
+        if (DOOR_CLOSED == Door_get_state(door)) {
+            LOG(LL_INFO, ("Door '%s' already closed, doing nothing", door->name));
+            return false; 
+        } 
     }
     LOG(LL_INFO, ("Lowering door '%s'", door->name));
     mgos_gpio_blink(door->closed_indicator_pin, 1000, 500);
     mgos_gpio_write(door->activate_pin_b, DOOR_HBRIDGE_ACTIVE);
     return true;
-}
-
-static void _timer_motor_stop(void *adoor) {
-    Door *door = (Door*) adoor;
-    Door_all_stop(door);
-    if (timer_id != MGOS_INVALID_TIMER_ID) {
-        mgos_clear_timer(timer_id);
-        timer_id = MGOS_INVALID_TIMER_ID;
-    }
 }
 
 static void _door_interrupt(int pin, void *arg) {
@@ -164,34 +163,34 @@ char *Door_status(void * vdoor) {
 
 bool Door_close(void *adoor, int flags) {
     Door *door = (Door *) adoor;
-    return _Door_close(door);
+    return _Door_close(door, flags);
 }
 
 bool Door_open(void *adoor, int flags) {
     Door *door = (Door *) adoor;
-    return _Door_open(door);
+    return _Door_open(door, flags);
 }
 
 void Door_indicate(void *adoor) {
     Door *door = (Door*) adoor;
-    mgos_gpio_write(door->closed_indicator_pin, false);
-    mgos_gpio_write(door->open_indicator_pin, false);
     mgos_gpio_blink(door->closed_indicator_pin, 0, 0);
     mgos_gpio_blink(door->open_indicator_pin, 0, 0);
+    mgos_gpio_write(door->closed_indicator_pin, false);
+    mgos_gpio_write(door->open_indicator_pin, false);
     switch(Door_get_state(door)) {
         case DOOR_OPEN:
-        mgos_gpio_write(door->open_indicator_pin, true);
-        break;
+            mgos_gpio_write(door->open_indicator_pin, true);
+            break;
         case DOOR_CLOSED:
-        mgos_gpio_write(door->closed_indicator_pin, true);
-        break;
+            mgos_gpio_write(door->closed_indicator_pin, true);
+            break;
         case DOOR_STUCK:
-        mgos_gpio_blink(door->closed_indicator_pin, 1000, 1000);
-        break;
+            mgos_gpio_blink(door->closed_indicator_pin, 1000, 1000);
+            break;
         default:
-        mgos_gpio_blink(door->closed_indicator_pin, 500, 500);
-        mgos_gpio_blink(door->open_indicator_pin, 200, 200);
-        break;
+            mgos_gpio_blink(door->closed_indicator_pin, 500, 500);
+            mgos_gpio_blink(door->open_indicator_pin, 200, 200);
+            break;
     }
 }
 

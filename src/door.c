@@ -66,6 +66,7 @@ static bool _Door_close(Door *door, int flags) {
     return true;
 }
 
+
 static void _door_interrupt(int pin, void *arg) {
     Door *door = (Door*) arg;
 
@@ -74,21 +75,25 @@ static void _door_interrupt(int pin, void *arg) {
         return;
     }
 
-    if (mgos_uptime() * 1000 - door->debounce_millis > mgos_sys_config_get_time_debounce_millis()) {
+    double interrupt_millis = mgos_uptime() * 1000.0;
+
+    if (abs(interrupt_millis - door->debounce_millis) > mgos_sys_config_get_time_debounce_millis()) {
         char *msg = Door_status(door);
         mgos_mqtt_pub("homie/coop-7e474a/north-door/position", msg, strlen(msg), 1, true);
-        door->debounce_millis = mgos_uptime() * 1000;
+        bool reading = mgos_gpio_read(pin);
+        LOG(LL_INFO, ("pin %d interrupt door %s: %s", pin, door->name, reading?"hi":"lo"));
+        if (reading) {
+            LOG(LL_INFO, ("Ignoring door interrupt on pin %d HI state", pin));
+        }
+        else {
+            Door_all_stop(door);
+        }
+        Door_indicate(door);
     }
     else {
         LOG(LL_WARN, ("interrupt debounced %d", mgos_sys_config_get_time_debounce_millis()));
     }
-    if (mgos_gpio_read(pin)) {
-        LOG(LL_INFO, ("Ignoring door interrupt on pin %d HI state", pin));
-        return;
-    }
-    LOG(LL_INFO, ("pin %d interrupt door %s", pin, door->name));
-    Door_all_stop(door);
-    Door_indicate(door);
+    door->debounce_millis = interrupt_millis;
 }
 
 void Door_init(Door *door) {
@@ -107,6 +112,7 @@ void Door_init(Door *door) {
     mgos_gpio_set_int_handler(door->closed_contact_pin, MGOS_GPIO_INT_EDGE_NEG, _door_interrupt, door);
     mgos_gpio_enable_int(door->closed_contact_pin);
     LOG(LL_INFO, ("Setup CLOSE interrupt on pin %d for door %s", door->closed_contact_pin, door->name));
+
     Door_all_stop(door);
 }
 

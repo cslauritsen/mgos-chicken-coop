@@ -16,41 +16,29 @@ static void getinfo_cb(struct mg_rpc *c, void *cb_arg,
 
     LOG(LL_INFO, ("err: %d, JSON %s", error_code, (char*) result.p));
     
-    /*
-    LOG(LL_INFO, ("Reading JSON for mac"));
-    int ret = json_scanf(result.p, result.len, "{mac: %Q}", &mac);
-    if (ret != 1) {
-        LOG(LL_WARN, ("Failed to read MAC addr: %d", ret));
-        if (mac != NULL) { 
-            free(mac);
-        }
+    LOG(LL_INFO, ("Reading JSON for mac & sta_ip"));
+    int ret = json_scanf(result.p, result.len, "{mac: %Q, wifi:{sta_ip: %Q}}", &mac, &ip);
+    if (ret != 2) {
+        LOG(LL_WARN, ("Failed to read IP & MAC addr: %d", ret));
+        if (ip != NULL) { free(ip); ip = NULL; }
+        if (mac != NULL) { free(mac); mac = NULL; }
     }
-    LOG(LL_INFO, ("Found MAC: %s", mac));
-    */
-
-    LOG(LL_INFO, ("Reading JSON for sta_ip"));
-    int ret = json_scanf(result.p, result.len, "wifi:{sta_ip: %Q}", &ip);
-    if (ret != 1) {
-        LOG(LL_WARN, ("Failed to read IP addr: %d", ret));
-        if (ip != NULL) free(ip);
-        ip = NULL;
+    else {
+        LOG(LL_INFO, ("Found IP: %s, mac: %s", ip, mac));
     }
-    LOG(LL_INFO, ("Found IP: %s", ip));
 
     (void) fi;
     (void) cb_arg;
 }
 
 void Util_init(void) {
-    if (mac == NULL) {
-        asprintf(&mac, "boobsboobsboobs");
-    }
-
-    struct mg_rpc_call_opts opts = {.dst = mg_mk_str(MGOS_RPC_LOOPBACK_ADDR) };
-    void *arg = NULL;
-    LOG(LL_INFO, ("Calling loopback rpc Sys.GetInfo"));
-    mg_rpc_callf(mgos_rpc_get_global(), mg_mk_str("Sys.GetInfo"), getinfo_cb, arg, &opts,
+    if (mac == NULL && ip == NULL) {
+        struct mg_rpc_call_opts opts = {.dst = mg_mk_str(MGOS_RPC_LOOPBACK_ADDR) };
+        void *arg = NULL;
+        LOG(LL_INFO, ("Calling loopback rpc Sys.GetInfo"));
+        mg_rpc_callf(mgos_rpc_get_global(), mg_mk_str("Sys.GetInfo"), getinfo_cb, arg, &opts,
                 NULL, NULL);
+    }
 }
 
 const char* Util_get_ip(void) {

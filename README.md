@@ -16,8 +16,8 @@ Light Sensor        | A0         | ADC0
 DHT22 Temp/RH       | D3         | GPIO0
 Door Open Contact   | D7         | GPIO13
 Door Closed Contact | D6         | GPIO12
-Motor Clockwise     | D2         | GPIO4
-Motor Counter-Clockwise | D1         | GPIO5
+Motor Forward       | D2         | GPIO4
+Motor Backward      | D1         | GPIO5
 
 ## Connector Legend
 Use the following layout with an RJ45 connector + Cat5 cable for the peripherals.

@@ -33,13 +33,14 @@ config_schema:
   - ["time.debounce_millis", "i",  500, { title: "Time interval during which repeated interrupts may be ignored"}]
   - ["time.light_trigger_min_hours", "i",  5, { title: "Minimum hours between light-based triggers of door transitions"}]
   - ["pins.dht", "i", 0, {title: "DHT GPIO Pin"}]
-  - ["pins.north_door_open_contact", "i",  13, { title: "Contact PIN to detect North Door fully open"}]
-  - ["pins.north_door_closed_contact", "i",  12, { title: "Contact PIN to detect North Door fully closed"}]
+  - ["pins.north_door_open_contact", "i",  12, { title: "Contact PIN to detect North Door fully open"}]
+  - ["pins.north_door_closed_contact", "i",  13, { title: "Contact PIN to detect North Door fully closed"}]
   - ["pins.north_door_raise", "i",  5, { title: "Control PIN to raise north door, driven LOW on startup"}]
   - ["pins.north_door_lower", "i",  4, { title: "Control PIN to lower north door, driven LOW on startup"}]
   - ["pins.indicator_red", "i",  15, { title: "Control PIN to turn on red indicator"}]
   - ["pins.indicator_green", "i",  14, { title: "Control PIN to turn on green indicator"}]
-  - ["pins.lightsensor", "i",  0, { title: "ADC PIN to read light level"}]
+  - ["pins.lightsensor", "i",  0, { title: "ADC pin to read light level"}]
+  - ["pins.door_stop", "i",  3, { title: "Interrupt pin to stop all doors when triggered"}]
   - ["luminosity.openThreshold", "i",  300, { title: "Values below which the door will auto-open"}]
   - ["luminosity.closeThreshold", "i",  900, { title: "Values above which the door will auto-close"}]
   - ["luminosity.enabled", "b",  false, { title: "Whether to automatically respond to light level"}]
@@ -54,6 +55,15 @@ config_schema:
   - ["debug.udp_log_addr", "s",  "192.168.1.5:31337", { title: "UDP log target"} ]
   - ["doors.north.name", "s",  "north-door", { title: "Name of North door"} ]
 
+
+  # https://users.pja.edu.pl/~jms/qnx/help/watcom/clibref/global_data.html
+  # https://github.com/G6EJD/ESP32-Time-Services-and-SETENV-variable/blob/master/ESP32_Time_and_SETENV.ino
+  # Example: EST5EDT4,M4.1.0/02:00:00,M10.5.0/02:00:00
+  # Eastern Standard Time is 5 hours earlier than Coordinated Universal Time (UTC).
+  # Standard time and daylight savings time both apply to this locale.
+  # Eastern Daylight Time (EDT) is one hour ahead of standard time.
+  # Daylight saving time starts on the first (1) Sunday (0) of April (4) at 2:00 A.M., and ends on the last (5) Sunday (0) of October (10) at 2:00 A.M.
+  - ["sys.tz_spec", "s", "EST5EDT4,M4.1.0/02:00:00,M10.5.0/02:00:00", {title: "See formats for the TZ env var: \"man tzset\". Formats like \":/path/to/file\" are not supported"}]
 
 # These settings get compiled into the C structure, and can be accessed
 # from the C code this way:
@@ -91,6 +101,7 @@ libs:
   - origin: https://github.com/mongoose-os-libs/dash
   - origin: https://github.com/mongoose-os-libs/sensor-utils
   - origin: https://github.com/mongoose-os-libs/adc
+  - origin: https://github.com/mongoose-os-libs/sntp
 
 # Used by the mos tool to catch mos binaries incompatible with this file format
 manifest_version: 2017-09-29

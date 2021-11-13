@@ -26,6 +26,7 @@ let Door_status = ffi('char * Door_status(void *)');
 let Door_close = ffi('bool Door_close(void *, int)');
 let Door_open = ffi('bool Door_open(void *, int)');
 let Door_all_stop = ffi('void Door_all_stop(void *)');
+let Door_indicate = ffi('void Door_indicate(void *)');
 
 let open_thresh = Cfg.get('luminosity.openThreshold');
 let close_thresh = Cfg.get('luminosity.closeThreshold');
@@ -234,6 +235,7 @@ else {
     MQTT.pub(bstpc + 'north-door/position', sdata.doors.north.position, qos, rtn);
     MQTT.pub(bstpc + 'light-sensor/luminosity', JSON.stringify(sdata.light.luminosity), qos, rtn);
   }
+  Door_indicate(north_door);
 }, null);
 
 // *****************************************************************
@@ -260,4 +262,7 @@ RPC.addHandler('NorthDoor.Close', function(args) {
 });
 RPC.addHandler('NorthDoor.Status', function(args) {
   return { value: Door_status(north_door) };
+});
+RPC.addHandler('Light.Read', function(args) {
+  return { value: ADC.read(Cfg.get('pins.lightsensor')) };
 });

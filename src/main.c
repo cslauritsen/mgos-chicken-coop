@@ -121,19 +121,40 @@ static void ip_cb(struct mg_rpc_request_info *ri, void *cb_arg,
 static void mac_cb(struct mg_rpc_request_info *ri, void *cb_arg,
                    struct mg_rpc_frame_info *fi, struct mg_str args) {
   LOG(LL_INFO, ("in mac_cb"));
-  mg_rpc_send_responsef(ri, "{ mac: \"%s\" }", Util_get_mac());
+  const char *mac = Util_get_mac();
+  mg_rpc_send_responsef(ri, "{ mac: \"%s\" }", mac);
+}
+
+static void _doors_stop_interrupt(int pin, void *arg) {
+    for (Door **p = (Door**) arg; *p; p++) {
+      Door *door = *p;
+      if (DE_OK != Door_validate(door)) {
+          LOG(LL_WARN, ("invalid door pointer"));
+          return;
+      }
+      Door_all_stop(door);
+      LOG(LL_INFO, ("Stopped door '%s'", door->name));
+    }
 }
 
 // Somewhere in init function, register the handler:
 enum mgos_app_init_result mgos_app_init(void) {
-    Door *north_door = Door_new(
-      mgos_sys_config_get_pins_north_door_open_contact(), 
-      mgos_sys_config_get_pins_north_door_closed_contact(), 
-      mgos_sys_config_get_pins_north_door_lower(), 
-      mgos_sys_config_get_pins_north_door_raise(), 
-      "NORTH",
-      mgos_sys_config_get_pins_indicator_red(),
-      mgos_sys_config_get_pins_indicator_green());
+  Door *north_door = Door_new(
+  mgos_sys_config_get_pins_north_door_open_contact(), 
+  mgos_sys_config_get_pins_north_door_closed_contact(), 
+  mgos_sys_config_get_pins_north_door_lower(), 
+  mgos_sys_config_get_pins_north_door_raise(), 
+  "NORTH",
+  mgos_sys_config_get_pins_indicator_red(),
+  mgos_sys_config_get_pins_indicator_green());
+
+  static Door * all_doors[] = { NULL, NULL };
+  all_doors[0] = north_door;
+
+  mgos_gpio_setup_input(mgos_sys_config_get_pins_door_stop(), MGOS_GPIO_PULL_UP);
+  mgos_gpio_set_int_handler(mgos_sys_config_get_pins_door_stop(), MGOS_GPIO_INT_EDGE_NEG, _doors_stop_interrupt, all_doors);
+  mgos_gpio_enable_int(mgos_sys_config_get_pins_door_stop());
+
   mg_rpc_add_handler(mgos_rpc_get_global(), "cNorthDoor.Open", NULL, open_cb, north_door);
   mg_rpc_add_handler(mgos_rpc_get_global(), "cNorthDoor.Close", NULL, close_cb, north_door);
   mg_rpc_add_handler(mgos_rpc_get_global(), "cNorthDoor.Status", NULL, status_cb, north_door);
@@ -142,6 +163,8 @@ enum mgos_app_init_result mgos_app_init(void) {
   mg_rpc_add_handler(mgos_rpc_get_global(), "csys.ip", NULL, ip_cb, NULL);
   mg_rpc_add_handler(mgos_rpc_get_global(), "csys.mac", NULL, mac_cb, NULL);
 
-  Door_indicate(north_door);
+  for (Door* door = *all_doors; door; door++) {
+    Door_indicate(door);
+  }
   return MGOS_APP_INIT_SUCCESS;
 }

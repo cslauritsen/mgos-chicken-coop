@@ -42,3 +42,4 @@ libs/
 .*.swp
 .*.swo
 .swp
+core-*

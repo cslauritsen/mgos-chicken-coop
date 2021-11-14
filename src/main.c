@@ -110,6 +110,8 @@ static void status_cb(struct mg_rpc_request_info *ri, void *cb_arg,
     "door: \"%s\", " 
     "status: \"%s\", "
     "version: \"%s\", "
+    "build_timestamp: \"%s\", "
+    "build_id: \"%s\", "
     "sched: { "
     "  next_open: \"%s\", "
     "  next_close: \"%s\", "
@@ -118,6 +120,8 @@ static void status_cb(struct mg_rpc_request_info *ri, void *cb_arg,
     door->name, 
     Door_status(door), 
     build_version,
+    build_timestamp,
+    build_id,
     door->next_open_time_str,
     door->next_close_time_str
     );

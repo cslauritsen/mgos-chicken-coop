@@ -108,15 +108,22 @@ static void status_cb(struct mg_rpc_request_info *ri, void *cb_arg,
   extern char* build_version;
   Door_indicate(door);
   Door_cron_next_run(door);
+
+  char current_time[32];
+  memset(current_time, 0, sizeof(current_time));
+  time_t now = 0;
+  time(&now);
+  mgos_strftime(current_time, sizeof(current_time)-1, "%c", now);
   mg_rpc_send_responsef(ri, "{"
     "door: \"%s\", " 
     "status: \"%s\", "
     "version: \"%s\", "
     "build_timestamp: \"%s\", "
     "build_id: \"%s\", "
+    "current_time: \"%s\", "
     "sched: { "
     "  next_open: \"%s\", "
-    "  next_close: \"%s\", "
+    "  next_close: \"%s\" "
     " }"
     "}", 
     door->name, 
@@ -124,6 +131,7 @@ static void status_cb(struct mg_rpc_request_info *ri, void *cb_arg,
     build_version,
     build_timestamp,
     build_id,
+    current_time,
     door->next_open_time_str,
     door->next_close_time_str
     );

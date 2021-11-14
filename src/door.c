@@ -236,3 +236,38 @@ DoorError Door_validate(void * arg) {
   }
   return DE_OK;
 }
+
+void _cron_open_cb(void *userdata, mgos_cron_id_t id) {
+    Door_open(userdata, 0);
+}
+
+void _cron_close_cb(void *userdata, mgos_cron_id_t id) {
+    Door_close(userdata, 0);
+}
+
+void Door_cron_setup(void *aDoor) {
+    Door *door = (Door *) aDoor;
+    mgos_cron_id_t x;
+
+    x = mgos_cron_add("@sunrise-30m", _cron_open_cb, aDoor);
+    door->open_cron_id = x; 
+
+    x = mgos_cron_add("@sunset+30m", _cron_close_cb, aDoor);
+    door->close_cron_id = x; 
+}
+
+void Door_cron_next_run(void *aDoor) {
+    Door *door = (Door *) aDoor;
+    time_t date = 0;
+    time(&date);
+    date += 1;
+
+    door->next_open_time = mgos_cron_get_next_invocation(door->open_cron_id, date);
+    door->next_close_time = mgos_cron_get_next_invocation(door->close_cron_id, date);
+
+    memset(door->next_open_time_str, 0, sizeof(door->next_open_time_str));
+    mgos_strftime(door->next_open_time_str, sizeof(door->next_open_time_str)-1, "%c", door->next_open_time);
+
+    memset(door->next_close_time_str, 0, sizeof(door->next_close_time_str));
+    mgos_strftime(door->next_close_time_str, sizeof(door->next_close_time_str)-1, "%c", door->next_close_time);
+}

@@ -65,6 +65,9 @@ config_schema:
   # Daylight saving time starts on the first (1) Sunday (0) of April (4) at 2:00 A.M., and ends on the last (5) Sunday (0) of October (10) at 2:00 A.M.
   - ["sys.tz_spec", "s", "EST5EDT4,M4.1.0/02:00:00,M10.5.0/02:00:00", {title: "See formats for the TZ env var: \"man tzset\". Formats like \":/path/to/file\" are not supported"}]
 
+  - ["device.location.lat", 41.45944444444445 ]
+  - ["device.location.lon", -81.55527777777777 ]
+
 # These settings get compiled into the C structure, and can be accessed
 # from the C code this way:
 #
@@ -102,6 +105,8 @@ libs:
   - origin: https://github.com/mongoose-os-libs/sensor-utils
   - origin: https://github.com/mongoose-os-libs/adc
   - origin: https://github.com/mongoose-os-libs/sntp
+  - origin: https://github.com/mongoose-os-libs/cron
+  - origin: https://github.com/mongoose-os-libs/location
 
 # Used by the mos tool to catch mos binaries incompatible with this file format
 manifest_version: 2017-09-29

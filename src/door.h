@@ -4,6 +4,8 @@
 #include "mgos_app.h"
 #include "mgos_system.h"
 #include "mgos_timers.h"
+#include "mgos_cron.h"
+#include <string.h>
 
 #define DOOR_STRUCT_ID 0x6452 // printable bytes 'dR'
 #define DF_ISSET(flags, flag) (~(flag) & (flags)) == (flag)
@@ -36,6 +38,12 @@ typedef struct
      */
     double last_light_trigger;
     double debounce_millis;
+    mgos_cron_id_t open_cron_id;
+    mgos_cron_id_t close_cron_id;
+    time_t next_open_time;
+    char next_open_time_str[32];
+    time_t next_close_time;
+    char next_close_time_str[32];
 } Door;
 
 typedef enum
@@ -68,4 +76,6 @@ bool Door_close(void *door, int flags);
 bool Door_open(void *door, int flags);
 DoorError Door_validate(void *door);
 void Door_indicate(void *door);
+void Door_cron_setup(void *aDoor);
+void Door_cron_next_run(void *aDoor); 
 #endif

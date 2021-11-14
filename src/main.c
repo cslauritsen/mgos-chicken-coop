@@ -105,10 +105,22 @@ static void status_cb(struct mg_rpc_request_info *ri, void *cb_arg,
   }
   extern char* build_version;
   Door_indicate(door);
-  mg_rpc_send_responsef(ri, "{ door: \"%s\", status: \"%s\", version: \"%s\" }", 
+  Door_cron_next_run(door);
+  mg_rpc_send_responsef(ri, "{"
+    "door: \"%s\", " 
+    "status: \"%s\", "
+    "version: \"%s\", "
+    "sched: { "
+    "  next_open: \"%s\", "
+    "  next_close: \"%s\", "
+    " }"
+    "}", 
     door->name, 
     Door_status(door), 
-    build_version);
+    build_version,
+    door->next_open_time_str,
+    door->next_close_time_str
+    );
   (void) fi;
 }
 
@@ -165,6 +177,7 @@ enum mgos_app_init_result mgos_app_init(void) {
 
   for (Door* door = *all_doors; door; door++) {
     Door_indicate(door);
+    Door_cron_setup(door);
   }
   return MGOS_APP_INIT_SUCCESS;
 }

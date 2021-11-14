@@ -250,7 +250,17 @@ void Door_cron_setup(void *aDoor) {
 
     //door->open_cron_id = mgos_cron_add("0 0 7 * * *", _cron_open_cb, aDoor);
     door->open_cron_id = mgos_cron_add("@sunrise", _cron_open_cb, aDoor);
+    if (door->open_cron_id == 0) { 
+        LOG(LL_ERROR, ("Invalid open cron job"));
+    } else {
+        LOG(LL_INFO, ("Add open cron job"));
+    }
     door->close_cron_id = mgos_cron_add("@sunset+1h", _cron_close_cb, aDoor);
+    if (door->close_cron_id == 0) { 
+        LOG(LL_ERROR, ("Invalid close cron job"));
+    } else {
+        LOG(LL_INFO, ("Add close cron job"));
+    }
 }
 
 void Door_cron_next_run(void *aDoor) {

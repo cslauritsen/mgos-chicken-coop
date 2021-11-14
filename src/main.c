@@ -122,8 +122,12 @@ static void status_cb(struct mg_rpc_request_info *ri, void *cb_arg,
     "build_id: \"%s\", "
     "current_time: \"%s\", "
     "sched: { "
-    "  next_open: \"%s\", "
-    "  next_close: \"%s\" "
+    "  next_open_timestamp: \"%s\", "
+    "  next_open_time: %d, "
+    "  next_close_timestamp: \"%s\", ",
+    "  next_close_time: %d, ",
+    "  open_cronid: %d, ",
+    "  close_cronid: %d "
     " }"
     "}", 
     door->name, 
@@ -133,7 +137,11 @@ static void status_cb(struct mg_rpc_request_info *ri, void *cb_arg,
     build_id,
     current_time,
     door->next_open_time_str,
-    door->next_close_time_str
+    door->next_open_time,
+    door->next_close_time_str,
+    door->next_close_time,
+    door->open_cron_id,
+    door->close_cron_id
     );
   (void) fi;
 }

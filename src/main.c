@@ -124,9 +124,9 @@ static void status_cb(struct mg_rpc_request_info *ri, void *cb_arg,
     "sched: { "
     "  next_open_timestamp: \"%s\", "
     "  next_open_time: %d, "
-    "  next_close_timestamp: \"%s\", ",
-    "  next_close_time: %d, ",
-    "  open_cronid: %d, ",
+    "  next_close_timestamp: \"%s\", "
+    "  next_close_time: %d, "
+    "  open_cronid: %d, "
     "  close_cronid: %d "
     " }"
     "}", 

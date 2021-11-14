@@ -18,6 +18,8 @@
 
 // declared in build_info.c
 extern char* build_version;
+extern char* build_id;
+extern char* build_timestamp;
 
 // helper functions for ffi
 int str2int(char *c) {

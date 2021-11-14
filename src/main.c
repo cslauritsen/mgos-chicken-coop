@@ -107,6 +107,7 @@ static void status_cb(struct mg_rpc_request_info *ri, void *cb_arg,
   }
   extern char* build_version;
   Door_indicate(door);
+
   Door_cron_next_run(door);
 
   char current_time[32];
@@ -171,6 +172,11 @@ static void _doors_stop_interrupt(int pin, void *arg) {
     }
 }
 
+static void post_boot_cb(void *aDoor) {
+  Door *door = (Door *) aDoor;
+  Door_cron_setup(door);
+}
+
 // Somewhere in init function, register the handler:
 enum mgos_app_init_result mgos_app_init(void) {
   Door *north_door = Door_new(
@@ -199,7 +205,9 @@ enum mgos_app_init_result mgos_app_init(void) {
 
   for (Door* door = *all_doors; door; door++) {
     Door_indicate(door);
-    Door_cron_setup(door);
   }
+  
+  // wait 5 seconds after boot up to setup the cronjobs
+  mgos_set_timer(5000, 0, post_boot_cb, north_door);
   return MGOS_APP_INIT_SUCCESS;
 }

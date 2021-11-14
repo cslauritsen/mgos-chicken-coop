@@ -247,7 +247,7 @@ void _cron_close_cb(void *userdata, mgos_cron_id_t id) {
 
 void Door_cron_setup(void *aDoor) {
     Door *door = (Door *) aDoor;
-
+    LOG(LL_INFO, ("Setting up cron jobs"));
     //door->open_cron_id = mgos_cron_add("0 0 7 * * *", _cron_open_cb, aDoor);
     door->open_cron_id = mgos_cron_add("@sunrise", _cron_open_cb, aDoor);
     if (door->open_cron_id == 0) { 

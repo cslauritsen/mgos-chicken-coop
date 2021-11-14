@@ -249,10 +249,11 @@ void Door_cron_setup(void *aDoor) {
     Door *door = (Door *) aDoor;
     mgos_cron_id_t x;
 
-    x = mgos_cron_add("@sunrise-30m", _cron_open_cb, aDoor);
+    //x = mgos_cron_add("@sunrise-30m", _cron_open_cb, aDoor);
+    x = mgos_cron_add("0 0 7 * * *", _cron_open_cb, aDoor);
     door->open_cron_id = x; 
 
-    x = mgos_cron_add("@sunset+30m", _cron_close_cb, aDoor);
+    x = mgos_cron_add("0 0 20 * * *", _cron_close_cb, aDoor);
     door->close_cron_id = x; 
 }
 

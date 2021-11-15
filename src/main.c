@@ -172,9 +172,12 @@ static void _doors_stop_interrupt(int pin, void *arg) {
     }
 }
 
-static void post_boot_cb(void *aDoor) {
-  Door *door = (Door *) aDoor;
-  Door_cron_setup(door);
+static void post_boot_cb(void *aDoors) {
+  Door **doors = (Door **) aDoors;
+  for (Door* door = *doors; door; door++) {
+    Door_cron_setup(door);
+    Door_indicate(door);
+  }
 }
 
 // Somewhere in init function, register the handler:
@@ -198,16 +201,13 @@ enum mgos_app_init_result mgos_app_init(void) {
   mg_rpc_add_handler(mgos_rpc_get_global(), "cNorthDoor.Open", NULL, open_cb, north_door);
   mg_rpc_add_handler(mgos_rpc_get_global(), "cNorthDoor.Close", NULL, close_cb, north_door);
   mg_rpc_add_handler(mgos_rpc_get_global(), "cNorthDoor.Status", NULL, status_cb, north_door);
+  mg_rpc_add_handler(mgos_rpc_get_global(), "Status.Read", NULL, status_cb, north_door);
   mg_rpc_add_handler(mgos_rpc_get_global(), "cNorthDoor.Stop", NULL, stop_cb, north_door);
   mg_rpc_add_handler(mgos_rpc_get_global(), "cNorthDoor.ResetLightTrigger", NULL, reset_cb, north_door);
   mg_rpc_add_handler(mgos_rpc_get_global(), "csys.ip", NULL, ip_cb, NULL);
   mg_rpc_add_handler(mgos_rpc_get_global(), "csys.mac", NULL, mac_cb, NULL);
 
-  for (Door* door = *all_doors; door; door++) {
-    Door_indicate(door);
-  }
-  
-  // wait 5 seconds after boot up to setup the cronjobs
-  mgos_set_timer(5000, 0, post_boot_cb, north_door);
+  // periodic tasks after boot up
+  mgos_set_timer(60000, MGOS_TIMER_REPEAT, post_boot_cb, all_doors);
   return MGOS_APP_INIT_SUCCESS;
 }

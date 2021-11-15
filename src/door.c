@@ -186,14 +186,18 @@ void Door_indicate(void *adoor) {
     switch(Door_get_state(door)) {
         case DOOR_OPEN:
             mgos_gpio_write(door->open_indicator_pin, true);
+            LOG(LL_INFO, ("%s is open", door->name));
             break;
         case DOOR_CLOSED:
             mgos_gpio_write(door->closed_indicator_pin, true);
+            LOG(LL_INFO, ("%s is closed", door->name));
             break;
         case DOOR_STUCK:
             mgos_gpio_blink(door->closed_indicator_pin, 1000, 1000);
+            LOG(LL_INFO, ("%s is stuck", door->name));
             break;
         default:
+            LOG(LL_INFO, ("%s is neither open, closed, nor stuck. Wtf?", door->name));
             mgos_gpio_blink(door->closed_indicator_pin, 500, 500);
             mgos_gpio_blink(door->open_indicator_pin, 200, 200);
             break;
@@ -248,18 +252,14 @@ void _cron_close_cb(void *userdata, mgos_cron_id_t id) {
 void Door_cron_setup(void *aDoor) {
     Door *door = (Door *) aDoor;
     LOG(LL_INFO, ("Setting up cron jobs"));
-    //door->open_cron_id = mgos_cron_add("0 0 7 * * *", _cron_open_cb, aDoor);
-    door->open_cron_id = mgos_cron_add("@sunrise", _cron_open_cb, aDoor);
-    if (door->open_cron_id == 0) { 
-        LOG(LL_ERROR, ("Invalid open cron job"));
-    } else {
-        LOG(LL_INFO, ("Add open cron job"));
-    }
-    door->close_cron_id = mgos_cron_add("@sunset+1h", _cron_close_cb, aDoor);
-    if (door->close_cron_id == 0) { 
-        LOG(LL_ERROR, ("Invalid close cron job"));
-    } else {
-        LOG(LL_INFO, ("Add close cron job"));
+    if (0 == door->open_cron_id) {
+        LOG(LL_INFO, ("No open cron job found, adding..."));
+        door->open_cron_id = mgos_cron_add("@sunrise", _cron_open_cb, aDoor);
+    } 
+
+    if (0 == door->close_cron_id) {
+        LOG(LL_INFO, ("No close cron job found, adding..."));
+        door->close_cron_id = mgos_cron_add("@sunset+1h", _cron_close_cb, aDoor);
     }
 }
 

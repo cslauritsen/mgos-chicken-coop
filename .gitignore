@@ -43,3 +43,4 @@ libs/
 .*.swo
 .swp
 core-*
+*.zip

@@ -172,12 +172,10 @@ static void _doors_stop_interrupt(int pin, void *arg) {
     }
 }
 
-static void post_boot_cb(void *aDoors) {
-  Door **doors = (Door **) aDoors;
-  for (Door* door = *doors; door; door++) {
-    Door_cron_setup(door);
-    Door_indicate(door);
-  }
+static void post_boot_cb(void *aDoor) {
+  Door *door = (Door *) aDoor;
+  Door_cron_setup(door);
+  Door_indicate(door);
 }
 
 // Somewhere in init function, register the handler:
@@ -208,6 +206,6 @@ enum mgos_app_init_result mgos_app_init(void) {
   mg_rpc_add_handler(mgos_rpc_get_global(), "csys.mac", NULL, mac_cb, NULL);
 
   // periodic tasks after boot up
-  mgos_set_timer(60000, MGOS_TIMER_REPEAT, post_boot_cb, all_doors);
+  mgos_set_timer(60000, 0, post_boot_cb, north_door);
   return MGOS_APP_INIT_SUCCESS;
 }

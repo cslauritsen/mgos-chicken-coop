@@ -267,14 +267,26 @@ void Door_cron_next_run(void *aDoor) {
     Door *door = (Door *) aDoor;
     time_t date = 0;
     time(&date);
+    if (date < 1000) {
+        LOG(LL_ERROR, ("Got invalid time val %ld", date));
+        return;
+    }
     date += 1;
+    if (0 != door->open_cron_id) {
+        door->next_open_time = mgos_cron_get_next_invocation(door->open_cron_id, date);
+        memset(door->next_open_time_str, 0, sizeof(door->next_open_time_str));
+        mgos_strftime(door->next_open_time_str, sizeof(door->next_open_time_str)-1, "%c", door->next_open_time);
+    }
+    else {
+        LOG(LL_WARN, ("No valid cron job found for %s", door->name));
+    }
 
-    door->next_open_time = mgos_cron_get_next_invocation(door->open_cron_id, date);
-    door->next_close_time = mgos_cron_get_next_invocation(door->close_cron_id, date);
-
-    memset(door->next_open_time_str, 0, sizeof(door->next_open_time_str));
-    mgos_strftime(door->next_open_time_str, sizeof(door->next_open_time_str)-1, "%c", door->next_open_time);
-
-    memset(door->next_close_time_str, 0, sizeof(door->next_close_time_str));
-    mgos_strftime(door->next_close_time_str, sizeof(door->next_close_time_str)-1, "%c", door->next_close_time);
+    if (0 != door->close_cron_id) {
+        door->next_close_time = mgos_cron_get_next_invocation(door->close_cron_id, date);
+        memset(door->next_close_time_str, 0, sizeof(door->next_close_time_str));
+        mgos_strftime(door->next_close_time_str, sizeof(door->next_close_time_str)-1, "%c", door->next_close_time);
+    }
+    else {
+        LOG(LL_WARN, ("No valid cron job found for %s", door->name));
+    }
 }

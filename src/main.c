@@ -123,6 +123,7 @@ static void status_cb(struct mg_rpc_request_info *ri, void *cb_arg,
     "build_id: \"%s\", "
     "current_time: \"%s\", "
     "sched: { "
+    "  enabled: %s, "
     "  next_open_timestamp: \"%s\", "
     "  next_open_time: %d, "
     "  next_close_timestamp: \"%s\", "
@@ -137,6 +138,7 @@ static void status_cb(struct mg_rpc_request_info *ri, void *cb_arg,
     build_timestamp,
     build_id,
     current_time,
+    mgos_sys_config_get_doors_cron_enabled() ? "true" : false,
     door->next_open_time_str,
     door->next_open_time,
     door->next_close_time_str,

@@ -242,11 +242,15 @@ DoorError Door_validate(void * arg) {
 }
 
 void _cron_open_cb(void *userdata, mgos_cron_id_t id) {
-    Door_open(userdata, 0);
+    if (mgos_sys_config_get_doors_cron_enabled()) {
+        Door_open(userdata, 0);
+    }
 }
 
 void _cron_close_cb(void *userdata, mgos_cron_id_t id) {
-    Door_close(userdata, 0);
+    if (mgos_sys_config_get_doors_cron_enabled()) {
+        Door_close(userdata, 0);
+    }
 }
 
 void Door_cron_setup(void *aDoor) {
@@ -254,12 +258,12 @@ void Door_cron_setup(void *aDoor) {
     LOG(LL_INFO, ("Setting up cron jobs"));
     if (0 == door->open_cron_id) {
         LOG(LL_INFO, ("No open cron job found, adding..."));
-        door->open_cron_id = mgos_cron_add("@sunrise", _cron_open_cb, aDoor);
+        door->open_cron_id = mgos_cron_add(mgos_sys_config_get_doors_cron_spec_open(), _cron_open_cb, aDoor);
     } 
 
     if (0 == door->close_cron_id) {
         LOG(LL_INFO, ("No close cron job found, adding..."));
-        door->close_cron_id = mgos_cron_add("@sunset+1h", _cron_close_cb, aDoor);
+        door->close_cron_id = mgos_cron_add(mgos_sys_config_get_doors_cron_spec_close(), _cron_close_cb, aDoor);
     }
 }
 

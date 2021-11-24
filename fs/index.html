@@ -1,13 +1,159 @@
 <html>
-<body>
-  <h1>Welcome to the coop</h1>
+  <head>
+    <title>The Cluck Club</title>
+    <meta name="viewport" content="width=250">
+    <meta charset="UTF-8">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script language="javascript">
+      function update_ndstatus() {
+        $(document).ready(function() {
+          $.get("/rpc/cnorthdoor.status", function(data, status){
+            cell = $("#ndstatus");
+            if (status === "success") {
+              cell.text(data.status);
+              cell.css("background-color", data.status === "closed" ? "green" : "red");
+              $("#nextopen").text(data.sched.next_open_timestamp);
+              $("#nextclose").text(data.sched.next_close_timestamp);
+              $("#cronenabled").text(data.sched.enabled);
+            }
+            else {
+              cell.text(status);
+              cell.css("background-color", "yellow");
+            }
+          });
+        });  
+      }
 
-  <ul>
+      function load_data() {
+        $(document).ready(function() {
 
-  <li> <a href="/rpc/northdoor.open">Open Door</a> </li>
-  <li> <a href="/rpc/northdoor.close">Close Door</a> </li>
-  <li> <a href="/rpc/northdoor.status">Door Status</a> </li>
-  </ul>
+          $.get("/rpc/tempf.read", function(data, status) {
+          cell = $("#tempf");
+            if (status === "success") {
+              cell.text(data.value.toFixed(1) + " °F");
+            }
+            else {
+              cell.text(status);
+              cell.css("background-color", "yellow");
+            }
+          });
+
+          $.get("/rpc/rh.read", function(data, status) {
+          cell = $("#rh");
+            if (status === "success") {
+              cell.text(data.value.toFixed(1) + "%");
+            }
+            else {
+              cell.text(status);
+              cell.css("background-color", "yellow");
+            }
+          });
+          update_ndstatus();
+        });
+
+        $('#btnopen').click(function() {
+          $.get("/rpc/cnorthdoor.open", function(data, status){
+            alert("Closing Result: " + data.value + "\nStatus: " + status);
+            update_ndsstatus();
+          });
+          return false;
+        });
+
+        $('#btnclose').click(function() {
+          $.get("/rpc/cnorthdoor.close", function(data, status){
+            alert("Closing Result: " + data.value + "\nStatus: " + status);
+            update_ndsstatus();
+          });
+          return false;
+        });
+
+        $('#btnstop').click(function() {
+          $.get("/rpc/cnorthdoor.stop", function(data, status){
+            alert("Closing Result: " + data.value + "\nStatus: " + status);
+            update_ndsstatus();
+          });
+          return false;
+        });
+      }
+
+
+    </script>
+    <style>
+
+      th {
+        text-align: left;
+      }
+
+      caption {
+        font-weight: bold;
+        font-size: 125%;
+        text-align: left;
+      }
+
+      form {
+        display: inline;
+        margin: 10px 10px 10px 10px;
+      }
+
+      #btnstop {
+        background-color: red;
+      }
+    </style>
+  </head>
+  
+<body onload="load_data()">
+
+
+  <div id="datacontainer">
+
+    <table>
+      <thead><caption>Current Conditions</caption></thead>
+      <tbody>
+        <tr>
+          <th>Temp</th>
+          <td id="tempf"></td>
+        </tr>
+        <tr>
+          <th>Relative Humdidity</th>
+          <td id="rh"></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <table>
+      <thead><caption>North Door</caption></thead>
+      <tbody>
+        <tr>
+          <th> Status </th>
+          <td id="ndstatus"></td>
+        </tr>
+        <tr>
+          <th> Schedule Enabled</th>
+          <td id="cronenabled"></td>
+        </tr>
+        <tr>
+          <th> Next Open </th>
+          <td id="nextopen"></td>
+        </tr>
+        <tr>
+          <th> Next Close </th>
+          <td id="nextclose"></td>
+        </tr>
+
+      </tbody>
+    </table>
+
+
+    </div>
+  </div>
+  <h1> Controls </h1>
+  <form action="#"> 
+    <button id="btnopen" class="actionbtn">Open</button>
+    <button id="btnclose" class="actionbtn">Close</button>
+    <button id="btnstop" class="actionbtn">Stop</button>
+  </form>
 
 </body>
 </html>

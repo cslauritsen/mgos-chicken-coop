@@ -21,7 +21,7 @@ function update_ndstatus() {
   function load_data() {
     $(document).ready(function() {
 
-      $.get("/rpc/tempf.read?x=y", function(data, status) {
+      $.get("/rpc/tempf.read", function(data, status) {
         cell = $("#tempf");
         if (status === "success") {
           cell.text(data.value.toFixed(1) + "°F");

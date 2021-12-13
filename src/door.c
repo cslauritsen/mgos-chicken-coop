@@ -7,6 +7,22 @@
 #include <mgos_mqtt.h>
 #include "door.h"
 
+static void _timer_stop_cb(void *aDoor) {
+    Door_all_stop(aDoor);
+}
+
+static void _cron_open_cb(void *userdata, mgos_cron_id_t id) {
+    if (mgos_sys_config_get_doors_cron_enabled()) {
+        Door_open(userdata, 0);
+    }
+}
+
+static void _cron_close_cb(void *userdata, mgos_cron_id_t id) {
+    if (mgos_sys_config_get_doors_cron_enabled()) {
+        Door_close(userdata, 0);
+    }
+}
+
 DoorState Door_get_state(Door *door) {
     // false->low voltage means switch closed & state active, since these 
     // are ground-connected reed switches with pullup resistors
@@ -80,6 +96,8 @@ static void _door_interrupt(int pin, void *arg) {
     if (abs(interrupt_millis - door->debounce_millis) > mgos_sys_config_get_time_debounce_millis()) {
         char *msg = Door_status(door);
         mgos_mqtt_pub("homie/coop-7e474a/north-door/position", msg, strlen(msg), 1, true);
+        // Pullup resistors are activated,
+        // so when door open/closed sensor contacts are closed we should read LOW
         bool reading = mgos_gpio_read(pin);
         LOG(LL_INFO, ("pin %d interrupt door %s: %s", pin, door->name, reading?"hi":"lo"));
         if (reading) {
@@ -169,6 +187,14 @@ char *Door_status(void * vdoor) {
 
 bool Door_close(void *adoor, int flags) {
     Door *door = (Door *) adoor;
+
+    // set a time limit for how the long motor can run while closing
+    // if the door gets stuck while closing, and the motor continues to run,
+    // it will begin to wind the spool
+    // around the wrong way and reverse the sense of open/close.
+    // That will cause physical damage or blow a fuse
+    mgos_set_timer(mgos_sys_config_get_doors_north_max_close_millis(), 0, _timer_stop_cb, door);
+
     return _Door_close(door, flags);
 }
 
@@ -239,18 +265,6 @@ DoorError Door_validate(void * arg) {
     return DE_NAME_LEN;
   }
   return DE_OK;
-}
-
-void _cron_open_cb(void *userdata, mgos_cron_id_t id) {
-    if (mgos_sys_config_get_doors_cron_enabled()) {
-        Door_open(userdata, 0);
-    }
-}
-
-void _cron_close_cb(void *userdata, mgos_cron_id_t id) {
-    if (mgos_sys_config_get_doors_cron_enabled()) {
-        Door_close(userdata, 0);
-    }
 }
 
 void Door_cron_setup(void *aDoor) {

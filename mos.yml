@@ -54,6 +54,7 @@ config_schema:
   - ["rpc.mqtt.enable", "b",  true, { title: "MQTT RPC enabled"} ]
   - ["debug.udp_log_addr", "s",  "192.168.1.5:31337", { title: "UDP log target"} ]
   - ["doors.north.name", "s",  "north-door", { title: "Name of North door"} ]
+  - ["doors.north.max.close.millis", "i",  4100, { title: "Max milliseconds the motor should run when closing"} ]
   - ["doors.cron.spec.open", "s",  "@sunrise", { title: "Cron spec to open door"} ]
   - ["doors.cron.spec.close", "s",  "@sunset+1h", { title: "Cron spec to close door"} ]
   - ["doors.cron.enabled", "b",  true, { title: "Flag to enable cron-based door opening"} ]

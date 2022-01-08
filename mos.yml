@@ -1,5 +1,5 @@
 author: Chad S. Lauritsen
-description: Chicken Coop Door Opener
+description: Chicken Coop IoT
 version: 1.3.0
 
 libs_version: ${mos.version}
@@ -58,7 +58,6 @@ config_schema:
   - ["doors.cron.spec.open", "s",  "@sunrise", { title: "Cron spec to open door"} ]
   - ["doors.cron.spec.close", "s",  "@sunset+1h", { title: "Cron spec to close door"} ]
   - ["doors.cron.enabled", "b",  true, { title: "Flag to enable cron-based door opening"} ]
-
 
   # https://users.pja.edu.pl/~jms/qnx/help/watcom/clibref/global_data.html
   # https://github.com/G6EJD/ESP32-Time-Services-and-SETENV-variable/blob/master/ESP32_Time_and_SETENV.ino

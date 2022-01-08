@@ -1,6 +1,6 @@
 author: Chad S. Lauritsen
 description: Chicken Coop Door Opener
-version: 1.3
+version: 1.3.0
 
 libs_version: ${mos.version}
 modules_version: ${mos.version}

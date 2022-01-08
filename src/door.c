@@ -209,18 +209,19 @@ void Door_indicate(void *adoor) {
     mgos_gpio_blink(door->open_indicator_pin, 0, 0);
     mgos_gpio_write(door->closed_indicator_pin, false);
     mgos_gpio_write(door->open_indicator_pin, false);
+    #define DOOR_INDICATE_LL LL_DEBUG
     switch(Door_get_state(door)) {
         case DOOR_OPEN:
             mgos_gpio_write(door->open_indicator_pin, true);
-            LOG(LL_INFO, ("%s is open", door->name));
+            LOG(DOOR_INDICATE_LL, ("%s is open", door->name));
             break;
         case DOOR_CLOSED:
             mgos_gpio_write(door->closed_indicator_pin, true);
-            LOG(LL_INFO, ("%s is closed", door->name));
+            LOG(DOOR_INDICATE_LL, ("%s is closed", door->name));
             break;
         case DOOR_STUCK:
             mgos_gpio_blink(door->closed_indicator_pin, 1000, 1000);
-            LOG(LL_INFO, ("%s is stuck", door->name));
+            LOG(DOOR_INDICATE_LL, ("%s is stuck", door->name));
             break;
         default:
             LOG(LL_INFO, ("%s is neither open, closed, nor stuck. Wtf?", door->name));

@@ -11,14 +11,13 @@ substitutions:
   door_lower_pin: GPIO5
   # behaviour (same as mos.yml defaults)
   door_motor_active_seconds: 10s   # time.door_motor_active_seconds: motor run-time backstop
-  light_trigger_min_hours: "5"     # time.light_trigger_min_hours
-  light_open_threshold: "300"      # luminosity.openThreshold: raw ADC (0-1024) at or below -> open
-  light_close_threshold: "900"     # luminosity.closeThreshold: raw ADC (0-1024) at or above -> close
   publish_interval: 60s            # time.mqttPubInterval
   # sun schedule: sun elevation at which to open (morning) / close (evening).
   # -0.833 deg is sunrise/sunset; -6 deg is civil twilight (about 30 min after sunset).
   open_elevation: "-0.833°"
   close_elevation: "-6°"
+  open_elevation_deg: "-0.833"   # same values as above, as plain numbers
+  close_elevation_deg: "-6.0"
   timezone: America/New_York
 
 esphome:
@@ -55,8 +54,33 @@ web_server:
 time:
   - platform: sntp
     timezone: ${timezone}
+    # After a reboot or power cut a sunrise/sunset may have been missed, so put the
+    # door where it should be once the clock is valid.
+    on_time_sync:
+      # only the first sync after boot; later resyncs must not override manual moves
+      - if:
+          condition:
+            and:
+              - switch.is_on: sun_schedule
+              - lambda: |-
+                  static bool first = true;
+                  const bool was_first = first;
+                  first = false;
+                  return was_first;
+          then:
+            - if:
+                condition:
+                  lambda: 'return id(sun_sun).elevation() > ${open_elevation_deg};'
+                then:
+                  - cover.open: north_door
+            - if:
+                condition:
+                  lambda: 'return id(sun_sun).elevation() < ${close_elevation_deg};'
+                then:
+                  - cover.close: north_door
 
 sun:
+  id: sun_sun
   latitude: !secret latitude
   longitude: !secret longitude
   on_sunrise:
@@ -75,16 +99,6 @@ sun:
               switch.is_on: sun_schedule
             then:
               - cover.close: north_door
-
-globals:
-  # millis() of the last light-triggered move
-  - id: last_light_trigger
-    type: uint32_t
-    initial_value: "0"
-  # false until the first light-triggered move after boot
-  - id: has_light_triggered
-    type: bool
-    initial_value: "false"
 
 switch:
   # Turn off to pause the sunrise/sunset open/close (e.g. while cleaning the coop).
@@ -184,7 +198,7 @@ sensor:
       name: Humidity
     update_interval: ${publish_interval}
 
-  # Raw 0-1024 reading, so the thresholds match the old firmware.
+  # Raw 0-1024 reading, as on the old firmware (reporting only, no automation).
   - platform: adc
     pin: A0
     raw: true
@@ -193,25 +207,6 @@ sensor:
     state_class: measurement
     filters:
       - throttle_average: ${publish_interval}
-    # Auto open/close on light, at most once per light_trigger_min_hours.
-    on_raw_value:
-      then:
-        - lambda: |-
-            const uint32_t min_ms = ${light_trigger_min_hours} * 3600UL * 1000UL;
-            if (id(has_light_triggered) && (millis() - id(last_light_trigger)) < min_ms)
-              return;
-            auto &door = id(north_door);
-            if (x <= ${light_open_threshold} && door.position == cover::COVER_CLOSED) {
-              ESP_LOGI("coop", "Opening door, luminosity %.0f", x);
-              door.make_call().set_command_open().perform();
-            } else if (x >= ${light_close_threshold} && door.position == cover::COVER_OPEN) {
-              ESP_LOGI("coop", "Closing door, luminosity %.0f", x);
-              door.make_call().set_command_close().perform();
-            } else {
-              return;
-            }
-            id(last_light_trigger) = millis();
-            id(has_light_triggered) = true;
 
   - platform: uptime
     name: Uptime
@@ -220,10 +215,3 @@ text_sensor:
   - platform: wifi_info
     ip_address:
       name: IP Address
-
-button:
-  # was NorthDoor.ResetLightTrigger
-  - platform: template
-    name: Reset Light Trigger
-    on_press:
-      - lambda: id(has_light_triggered) = false;

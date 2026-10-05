@@ -42,3 +42,5 @@ libs/
 .*.swp
 .*.swo
 .swp
+esphome/secrets.yaml
+esphome/.esphome/

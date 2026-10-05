@@ -23,6 +23,14 @@ esphome run chicken-coop.yaml
 | Homie + HA discovery | MQTT with HA discovery (default), or swap `mqtt:` for `api:` |
 | OTA via `/update` | ESPHome OTA |
 
+## Sun schedule
+Opens at sunrise and closes at civil dusk (sun 6 degrees below the horizon, roughly 30 minutes after sunset),
+using the `sun` and SNTP `time` components. It runs on the device, so it works without Home Assistant
+or the broker. Set `latitude`/`longitude` in `secrets.yaml` (decimal degrees, west is negative), and
+adjust `open_elevation`, `close_elevation` and `timezone` in the substitutions. The "Sun Schedule" switch
+pauses it. It runs alongside the light-sensor trigger, which is unchanged. The clock is only synced
+after boot while WiFi is up, so nothing is scheduled until the first sync.
+
 ## Manual rocker switch
 A rocker wired straight to the H-bridge works without the firmware, but the ESP can't see it. The reed
 switches still can: when the cover is idle, the reed switches update the cover state (open / closed / half

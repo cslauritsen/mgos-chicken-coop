@@ -15,6 +15,11 @@ substitutions:
   light_open_threshold: "300"      # luminosity.openThreshold: raw ADC (0-1024) at or below -> open
   light_close_threshold: "900"     # luminosity.closeThreshold: raw ADC (0-1024) at or above -> close
   publish_interval: 60s            # time.mqttPubInterval
+  # sun schedule: sun elevation at which to open (morning) / close (evening).
+  # -0.833 deg is sunrise/sunset; -6 deg is civil twilight (about 30 min after sunset).
+  open_elevation: "-0.833°"
+  close_elevation: "-6°"
+  timezone: America/New_York
 
 esphome:
   name: ${name}
@@ -46,6 +51,31 @@ mqtt:
 web_server:
   port: 80
 
+# Clock for the sun schedule; set once at boot, then kept by the ESP.
+time:
+  - platform: sntp
+    timezone: ${timezone}
+
+sun:
+  latitude: !secret latitude
+  longitude: !secret longitude
+  on_sunrise:
+    - elevation: ${open_elevation}
+      then:
+        - if:
+            condition:
+              switch.is_on: sun_schedule
+            then:
+              - cover.open: north_door
+  on_sunset:
+    - elevation: ${close_elevation}
+      then:
+        - if:
+            condition:
+              switch.is_on: sun_schedule
+            then:
+              - cover.close: north_door
+
 globals:
   # millis() of the last light-triggered move
   - id: last_light_trigger
@@ -57,6 +87,12 @@ globals:
     initial_value: "false"
 
 switch:
+  # Turn off to pause the sunrise/sunset open/close (e.g. while cleaning the coop).
+  - platform: template
+    id: sun_schedule
+    name: Sun Schedule
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
   # Motor H-bridge. Both outputs are forced LOW on boot and may never be HIGH
   # together (interlock turns the other one off first).
   - platform: gpio

@@ -116,9 +116,117 @@ let homie_setup_msgs = [
   {t: bstpc + 'light-sensor/$properties',  m:'luminosity', qos: 1, retain: true},
   {t: bstpc + 'light-sensor/luminosity/$datatype',  m:'integer', qos: 1, retain: true},
   {t: bstpc + 'light-sensor/luminosity/$settable',  m:'false', qos: 1, retain: true},
-
-  {t: bstpc + '$state',  m:'ready', qos: 1, retain: true}
 ];
+
+// ----------------------------------------------------------------------
+// Home Assistant MQTT discovery (https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery)
+// Published alongside homie, with its own state/command topics.
+// Availability reuses the homie $state topic (ready / lost via the LWT).
+let ha_disc_prefix = 'homeassistant';
+let hpc = 'coop/' + thing_id + '/';           // HA state & command topic root
+let ha_cmd_topic = hpc + 'north-door/set';    // payloads: OPEN / CLOSE
+let ha_door_topic = hpc + 'north-door/state'; // open / closed / stuck / unknown
+let ha_open_topic = hpc + 'north-door/open-contact';     // ON when open reed made
+let ha_closed_topic = hpc + 'north-door/closed-contact'; // ON when closed reed made
+let ha_temp_topic = hpc + 'dht22/temperature';
+let ha_rh_topic = hpc + 'dht22/humidity';
+let ha_lum_topic = hpc + 'light-sensor/luminosity';
+
+let ha_device = {identifiers: [thing_id], name: nm, model: 'ESP8266 Chicken Coop'};
+let ha_entity = function (id, name, extra) {
+  let c = {
+    name: name,
+    unique_id: thing_id + '_' + id,
+    has_entity_name: true,
+    device: ha_device,
+    availability_topic: bstpc + '$state',
+    payload_available: 'ready',
+    payload_not_available: 'lost',
+  };
+  for (let k in extra) {
+    c[k] = extra[k];
+  }
+  return c;
+};
+let ha_msg = function (component, id, name, extra) {
+  return {
+    t: ha_disc_prefix + '/' + component + '/' + thing_id + '/' + id + '/config',
+    m: JSON.stringify(ha_entity(id, name, extra)),
+    qos: 1, retain: true
+  };
+};
+
+homie_setup_msgs.push(ha_msg('cover', 'north_door', 'North Door', {
+  device_class: 'door',
+  command_topic: ha_cmd_topic,
+  payload_open: 'OPEN',
+  payload_close: 'CLOSE',
+  payload_stop: null,
+  state_topic: ha_door_topic,
+  state_open: 'open',
+  state_closed: 'closed',
+  state_stopped: 'stuck',
+  value_template: "{{ 'None' if value == 'unknown' else value }}"
+}));
+// Reed switches are grounded with pull-ups: pin LOW == contact made == ON
+homie_setup_msgs.push(ha_msg('binary_sensor', 'north_door_open_contact', 'North Door Fully Open', {
+  state_topic: ha_open_topic, payload_on: 'ON', payload_off: 'OFF'
+}));
+homie_setup_msgs.push(ha_msg('binary_sensor', 'north_door_closed_contact', 'North Door Fully Closed', {
+  state_topic: ha_closed_topic, payload_on: 'ON', payload_off: 'OFF'
+}));
+homie_setup_msgs.push(ha_msg('sensor', 'temperature', 'Temperature', {
+  device_class: 'temperature', state_class: 'measurement',
+  unit_of_measurement: '°C', state_topic: ha_temp_topic
+}));
+homie_setup_msgs.push(ha_msg('sensor', 'humidity', 'Humidity', {
+  device_class: 'humidity', state_class: 'measurement',
+  unit_of_measurement: '%', state_topic: ha_rh_topic
+}));
+homie_setup_msgs.push(ha_msg('sensor', 'luminosity', 'Luminosity', {
+  state_class: 'measurement', state_topic: ha_lum_topic
+}));
+
+// must stay last: the publish loop below treats it as "setup complete"
+homie_setup_msgs.push({t: bstpc + '$state',  m:'ready', qos: 1, retain: true});
+
+// subscribe to HA cover commands
+MQTT.sub(ha_cmd_topic, function(conn, topic, msg) {
+  Log.print(Log.INFO, 'HA command:', msg);
+  if (msg === 'OPEN') {
+    Door_open(north_door, 0);
+  }
+  else if (msg === 'CLOSE') {
+    Door_close(north_door, 0);
+  }
+  else {
+    Log.print(Log.INFO, 'HA command ignored:', msg);
+  }
+}, null);
+
+let ha_last = {door: null, open: null, closed: null};
+let ha_pub_states = function (sdata, force) {
+  let door = sdata.doors.north.position;
+  let open = GPIO.read(open_cpin) ? 'OFF' : 'ON';
+  let closed = GPIO.read(closed_cpin) ? 'OFF' : 'ON';
+  if (force || door !== ha_last.door) {
+    MQTT.pub(ha_door_topic, door, 1, true);
+    ha_last.door = door;
+  }
+  if (force || open !== ha_last.open) {
+    MQTT.pub(ha_open_topic, open, 1, true);
+    ha_last.open = open;
+  }
+  if (force || closed !== ha_last.closed) {
+    MQTT.pub(ha_closed_topic, closed, 1, true);
+    ha_last.closed = closed;
+  }
+  if (force) {
+    MQTT.pub(ha_temp_topic, JSON.stringify(sdata.dht22.celsius), 1, true);
+    MQTT.pub(ha_rh_topic, JSON.stringify(sdata.dht22.rh), 1, true);
+    MQTT.pub(ha_lum_topic, JSON.stringify(sdata.light.luminosity), 1, true);
+  }
+};
 
 // subscribe to homie set commands
 MQTT.sub(bstpc + '+/+/set', function(conn, topic, msg) {
@@ -140,6 +248,7 @@ Log.print(Log.INFO, 'subscribed');
 
 let homie_msg_ix = 0;
 let homie_init = false;
+let ha_published = false;
 
 // Asynchronously advance through the homie setup stuff until done
 let homie_timer = Timer.set(Cfg.get("homie.pubinterval"), true, function() {
@@ -210,7 +319,15 @@ Timer.set(1000, true, function() {
     Log.print(Log.ERROR, "Luminosity reading not within acceptable range.");
   }
 
-  if (counter++ % pubInt === 0 && homie_msg_ix >= homie_setup_msgs.length-1) {
+  let setup_done = homie_msg_ix >= homie_setup_msgs.length-1;
+  let periodic = counter++ % pubInt === 0;
+  if (setup_done) {
+    // door/reed changes go out immediately; everything else every pubInt seconds
+    ha_pub_states(sdata, periodic || !ha_published);
+    ha_published = true;
+  }
+
+  if (periodic && setup_done) {
     let qos = 1;
     let rtn = true;
     MQTT.pub(bstpc + '$state', 'ready', 1, true);

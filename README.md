@@ -60,6 +60,22 @@ In the example below, "alpha" is "correlation ID", that is, an identifier that w
     '{id: 1, "src":"alpha", "method": "NorthDoor.Open"}' 
  ```
 
+## Home Assistant MQTT Discovery
+In addition to Homie, the device publishes [Home Assistant MQTT discovery](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery)
+configs (retained, default `homeassistant` prefix) so the coop shows up automatically as one device.
+Homie and Home Assistant are both always published; they use separate topics. Availability reuses the
+Homie `$state` topic (`ready` / `lost`).
+
+Entity | Type | Topic (`<id>` = `coop-xxxxxx`)
+------ | ---- | -----
+North Door | `cover` (door) | state `coop/<id>/north-door/state` (`open`/`closed`/`stuck`/`unknown`), command `coop/<id>/north-door/set` (`OPEN`/`CLOSE`; no stop)
+North Door Fully Open | `binary_sensor` | `coop/<id>/north-door/open-contact` (`ON` = reed switch made)
+North Door Fully Closed | `binary_sensor` | `coop/<id>/north-door/closed-contact` (`ON` = reed switch made)
+Temperature / Humidity | `sensor` | `coop/<id>/dht22/temperature` (°C), `coop/<id>/dht22/humidity`
+Luminosity | `sensor` | `coop/<id>/light-sensor/luminosity`
+
+Door and reed-switch states are published as soon as they change; sensors every `time.mqttPubInterval` seconds.
+
 ## MQTT Trigger
 TODO: It would be simpler in (especially for OpenHAB) if the relay activation could be triggered simply by the arrival of any message body `1` to a set topic, rather than having to craft and send a JSON document per MongooseOS' RPC requirements.
 

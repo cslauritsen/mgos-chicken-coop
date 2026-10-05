@@ -83,6 +83,20 @@ binary_sensor:
       inverted: true
     filters:
       - delayed_on_off: 50ms
+    # Keep the cover in step when the door is moved by the manual rocker switch
+    # (the cover ignores the reed switches while it is idle).
+    on_press:
+      - lambda: !lambda |-
+          if (id(north_door).current_operation == cover::COVER_OPERATION_IDLE) {
+            id(north_door).position = cover::COVER_OPEN;
+            id(north_door).publish_state();
+          }
+    on_release:
+      - lambda: !lambda |-
+          if (id(north_door).current_operation == cover::COVER_OPERATION_IDLE) {
+            id(north_door).position = 0.5f;
+            id(north_door).publish_state();
+          }
   - platform: gpio
     id: door_closed_contact
     name: North Door Fully Closed
@@ -92,6 +106,18 @@ binary_sensor:
       inverted: true
     filters:
       - delayed_on_off: 50ms
+    on_press:
+      - lambda: !lambda |-
+          if (id(north_door).current_operation == cover::COVER_OPERATION_IDLE) {
+            id(north_door).position = cover::COVER_CLOSED;
+            id(north_door).publish_state();
+          }
+    on_release:
+      - lambda: !lambda |-
+          if (id(north_door).current_operation == cover::COVER_OPERATION_IDLE) {
+            id(north_door).position = 0.5f;
+            id(north_door).publish_state();
+          }
 
 cover:
   - platform: endstop

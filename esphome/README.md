@@ -23,6 +23,16 @@ esphome run chicken-coop.yaml
 | Homie + HA discovery | MQTT with HA discovery (default), or swap `mqtt:` for `api:` |
 | OTA via `/update` | ESPHome OTA |
 
+## Manual rocker switch
+A rocker wired straight to the H-bridge works without the firmware, but the ESP can't see it. The reed
+switches still can: when the cover is idle, the reed switches update the cover state (open / closed / half
+way), so Home Assistant stays correct after a manual move. The light trigger only fires while the door is
+sitting on an endstop, so it won't start the motor while the rocker is being used mid-travel.
+
+If the rocker is wired in parallel with the ESP's GPIO4/GPIO5 (rather than through a switch/relay stage),
+the ESP pins (driven LOW) and the rocker (pulling HIGH) would fight. The old firmware had the same
+arrangement, but check it, and add series resistors or diodes if so.
+
 ## Not ported
 * **Homie** and the **Mongoose RPC** (`rpc` topic, `NorthDoor.*` methods): not needed with Home Assistant.
 * The old `stuck`/`unknown` door states. The cover reports open/closed/opening/closing; the two reed
